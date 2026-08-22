@@ -355,71 +355,76 @@ export const AdminStaff: React.FC = () => {
 
     setIsSubmittingCreate(true);
 
-    const zonesArray = createForm.role === 'delivery' 
-      ? createForm.assignedZones.split(',').map(z => z.trim()).filter(Boolean)
-      : undefined;
+    try {
+      const zonesArray = createForm.role === 'delivery' && typeof createForm.assignedZones === 'string'
+        ? createForm.assignedZones.split(',').map(z => z.trim()).filter(Boolean)
+        : undefined;
 
-    const res = await createStaffAccount(
-      {
-        name: createForm.name.trim(),
-        loginId: createForm.loginId.trim(),
-        password: createForm.password,
-        role: createForm.role,
-        phone: createForm.phone.trim(),
-        email: createForm.email.trim(),
-        title: createForm.title.trim(),
-        department: createForm.department.trim(),
-        staffId: createForm.staffId.trim(),
-        territory: createForm.role === 'sales' ? createForm.territory.trim() : undefined,
-        monthlyTarget: createForm.role === 'sales' ? Number(createForm.monthlyTarget) : undefined,
-        commissionRate: createForm.role === 'sales' ? Number(createForm.commissionRate) : undefined,
-        vehicleType: createForm.role === 'delivery' ? createForm.vehicleType : undefined,
-        vehicleNumber: createForm.role === 'delivery' ? createForm.vehicleNumber.trim() : undefined,
-        assignedZones: zonesArray
-      },
-      activeAdminUser?.uid || 'admin',
-      activeAdminUser?.name || 'Administrator'
-    );
+      const res = await createStaffAccount(
+        {
+          name: createForm.name.trim(),
+          loginId: createForm.loginId.trim(),
+          password: createForm.password,
+          role: createForm.role,
+          phone: createForm.phone.trim(),
+          email: createForm.email.trim(),
+          title: createForm.title.trim(),
+          department: createForm.department.trim(),
+          staffId: createForm.staffId.trim(),
+          territory: createForm.role === 'sales' ? createForm.territory.trim() : undefined,
+          monthlyTarget: createForm.role === 'sales' ? Number(createForm.monthlyTarget) : undefined,
+          commissionRate: createForm.role === 'sales' ? Number(createForm.commissionRate) : undefined,
+          vehicleType: createForm.role === 'delivery' ? createForm.vehicleType : undefined,
+          vehicleNumber: createForm.role === 'delivery' ? createForm.vehicleNumber.trim() : undefined,
+          assignedZones: zonesArray
+        },
+        activeAdminUser?.uid || 'admin',
+        activeAdminUser?.name || 'Administrator'
+      );
 
-    if (res.success && res.user) {
-      // If photo was selected, upload to Firebase Storage and attach download URL to Firestore profile
-      if (createPhotoFile) {
-        try {
-          const uploadRes = await uploadStaffProfilePhoto(
-            createPhotoFile, 
-            res.user.uid, 
-            activeAdminUser?.uid || 'admin'
-          );
-          if (uploadRes.success && uploadRes.downloadURL) {
-            await updateStaffProfile(
-              res.user.uid,
-              { photoURL: uploadRes.downloadURL },
-              activeAdminUser?.uid || 'admin',
-              activeAdminUser?.name || 'Administrator',
-              createForm.loginId.trim()
+      if (res.success && res.user) {
+        // If photo was selected, upload to Firebase Storage and attach download URL to Firestore profile
+        if (createPhotoFile) {
+          try {
+            const uploadRes = await uploadStaffProfilePhoto(
+              createPhotoFile, 
+              res.user.uid, 
+              activeAdminUser?.uid || 'admin'
             );
+            if (uploadRes.success && uploadRes.downloadURL) {
+              await updateStaffProfile(
+                res.user.uid,
+                { photoURL: uploadRes.downloadURL },
+                activeAdminUser?.uid || 'admin',
+                activeAdminUser?.name || 'Administrator',
+                createForm.loginId.trim()
+              );
+            }
+          } catch (uploadErr) {
+            console.error('Failed to upload profile photo:', uploadErr);
           }
-        } catch (uploadErr) {
-          console.error('Failed to upload profile photo:', uploadErr);
         }
-      }
 
+        setShowCreatedCredentials({
+          loginId: createForm.loginId.trim(),
+          pass: createForm.password,
+          name: createForm.name.trim(),
+          role: createForm.role
+        });
+        addToast({
+          type: 'success',
+          title: 'Staff Account Created',
+          message: `Account for ${createForm.name} (${createForm.loginId}) is active and ready for login.`
+        });
+        loadStaffList();
+      } else {
+        setCreateError(res.error || 'Failed to create staff account.');
+      }
+    } catch (err: any) {
+      console.error('Error in handleCreateSubmit:', err);
+      setCreateError(err?.message || 'An unexpected error occurred while creating staff account.');
+    } finally {
       setIsSubmittingCreate(false);
-      setShowCreatedCredentials({
-        loginId: createForm.loginId.trim(),
-        pass: createForm.password,
-        name: createForm.name.trim(),
-        role: createForm.role
-      });
-      addToast({
-        type: 'success',
-        title: 'Staff Account Created',
-        message: `Account for ${createForm.name} (${createForm.loginId}) is active and ready for login.`
-      });
-      loadStaffList();
-    } else {
-      setIsSubmittingCreate(false);
-      setCreateError(res.error || 'Failed to create staff account.');
     }
   };
 
