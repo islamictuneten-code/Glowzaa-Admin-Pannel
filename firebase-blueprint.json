@@ -1,0 +1,431 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access and staff metadata",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "id": { "type": "string", "description": "User identifier (matching uid or staffId)" },
+        "loginId": { "type": "string", "description": "Unique username / Login ID for staff e.g. seller01, delivery01" },
+        "name": { "type": "string", "description": "Full name of staff or admin" },
+        "email": { "type": "string", "description": "Corporate or authentication email address" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "role": { "type": "string", "description": "Role: admin, sales, or delivery", "enum": ["admin", "sales", "delivery"] },
+        "status": { "type": "string", "description": "Account status: active or inactive", "enum": ["active", "inactive"] },
+        "avatar": { "type": "string", "description": "Avatar initials or photo" },
+        "title": { "type": "string", "description": "Job title" },
+        "department": { "type": "string", "description": "Department name" },
+        "staffId": { "type": "string", "description": "Staff ID reference" },
+        "territory": { "type": "string", "description": "Sales territory assigned" },
+        "assignedArea": { "type": "string", "description": "Delivery area assigned" },
+        "assignedZones": {
+          "type": "array",
+          "description": "Delivery zones or areas assigned",
+          "items": { "type": "string" }
+        },
+        "vehicleNumber": { "type": "string", "description": "Delivery vehicle registration" },
+        "vehicleType": { "type": "string", "description": "Delivery vehicle type e.g. Covered Van, Motorcycle, Mini-Truck" },
+        "monthlyTarget": { "type": "number", "description": "Sales staff monthly target in BDT" },
+        "commissionRate": { "type": "number", "description": "Sales staff commission percentage" },
+        "createdBy": { "type": "string", "description": "Admin UID who created the account" },
+        "createdByName": { "type": "string", "description": "Admin name who created the account" },
+        "lastLoginAt": { "type": "string", "description": "Timestamp of last user login" },
+        "createdAt": { "type": "string", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last profile update timestamp" },
+        "updatedBy": { "type": "string", "description": "Admin UID who last updated this profile" }
+      },
+      "required": ["uid", "name", "email", "role", "status", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category and subcategories structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Category document ID" },
+        "name": { "type": "string", "description": "Category display name" },
+        "slug": { "type": "string", "description": "URL-friendly category slug" },
+        "description": { "type": "string", "description": "Short category description" },
+        "status": { "type": "string", "description": "Status: active or inactive", "enum": ["active", "inactive"] },
+        "subCategories": {
+          "type": "array",
+          "description": "List of child sub-categories",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "slug": { "type": "string" },
+              "status": { "type": "string", "enum": ["active", "inactive"] }
+            },
+            "required": ["id", "name", "status"]
+          }
+        },
+        "order": { "type": "number", "description": "Display order sort index" },
+        "createdAt": { "type": "string", "description": "Creation ISO date" },
+        "updatedAt": { "type": "string", "description": "Last updated ISO date" },
+        "createdBy": { "type": "string", "description": "User ID of creator" }
+      },
+      "required": ["id", "name", "status", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Glowzaa B2B catalog product item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Product unique document ID" },
+        "name": { "type": "string", "description": "Product title" },
+        "sku": { "type": "string", "description": "Product unique SKU / Code" },
+        "category": { "type": "string", "description": "Main category name" },
+        "categoryId": { "type": "string", "description": "Category document ID reference" },
+        "subCategory": { "type": "string", "description": "Sub-category name" },
+        "brand": { "type": "string", "description": "Brand manufacturer name" },
+        "image": { "type": "string", "description": "Product image URL" },
+        "description": { "type": "string", "description": "Product details description" },
+        "status": { "type": "string", "description": "Product status: active or inactive", "enum": ["active", "inactive"] },
+        "purchasePrice": { "type": "number", "description": "Purchase cost in BDT" },
+        "wholesalePrice": { "type": "number", "description": "Wholesale price in BDT" },
+        "mrp": { "type": "number", "description": "Maximum Retail Price in BDT" },
+        "minSellingPrice": { "type": "number", "description": "Floor minimum selling price in BDT" },
+        "openingStock": { "type": "number", "description": "Initial recorded stock" },
+        "currentStock": { "type": "number", "description": "Live available stock quantity" },
+        "lowStockThreshold": { "type": "number", "description": "Reorder warning threshold quantity" },
+        "unit": { "type": "string", "description": "Unit of measure: piece, box, pack, dozen, etc." },
+        "barcode": { "type": "string", "description": "Optional EAN/UPC barcode" },
+        "size": { "type": "string", "description": "Optional size (e.g. 50ml, 100g)" },
+        "color": { "type": "string", "description": "Optional shade/color" },
+        "variant": { "type": "string", "description": "Optional variant label" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" },
+        "createdBy": { "type": "string", "description": "User UID who added the product" }
+      },
+      "required": ["id", "name", "sku", "category", "purchasePrice", "wholesalePrice", "mrp", "currentStock", "status", "unit", "createdAt"]
+    },
+    "InventoryTransaction": {
+      "title": "InventoryTransaction",
+      "description": "Audit trail log of all stock adjustments and movements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Transaction log ID" },
+        "productId": { "type": "string", "description": "Referenced Product ID" },
+        "productName": { "type": "string", "description": "Product title" },
+        "sku": { "type": "string", "description": "Product SKU" },
+        "previousStock": { "type": "number", "description": "Stock count before adjustment" },
+        "adjustmentQuantity": { "type": "number", "description": "Delta quantity (+ or -)" },
+        "newStock": { "type": "number", "description": "Stock count after adjustment" },
+        "type": { "type": "string", "description": "Movement classification", "enum": ["stock_in", "adjustment", "damage", "audit", "return", "sample"] },
+        "reason": { "type": "string", "description": "Explanation for stock change" },
+        "userId": { "type": "string", "description": "User UID who made the change" },
+        "userName": { "type": "string", "description": "Name of user who made the change" },
+        "userRole": { "type": "string", "description": "Role of user who made the change" },
+        "createdAt": { "type": "string", "description": "Transaction timestamp" }
+      },
+      "required": ["id", "productId", "previousStock", "adjustmentQuantity", "newStock", "reason", "userId", "createdAt"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "B2B retail shop, reseller, and commercial customer profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Customer unique Firestore document ID" },
+        "customerId": { "type": "string", "description": "Customer reference code e.g. CUST-1001" },
+        "shopName": { "type": "string", "description": "Retail shop or business name" },
+        "ownerName": { "type": "string", "description": "Proprietor or contact person name" },
+        "phone": { "type": "string", "description": "Primary phone number" },
+        "alternatePhone": { "type": "string", "description": "Secondary or alternate phone" },
+        "email": { "type": "string", "description": "Customer email address" },
+        "address": { "type": "string", "description": "Shop street address" },
+        "area": { "type": "string", "description": "Neighborhood or police station area" },
+        "city": { "type": "string", "description": "City name" },
+        "district": { "type": "string", "description": "District in Bangladesh" },
+        "notes": { "type": "string", "description": "Special instructions or merchant notes" },
+        "assignedSalesUserId": { "type": "string", "description": "User ID of assigned sales representative" },
+        "assignedSalesUserName": { "type": "string", "description": "Name of assigned sales representative" },
+        "status": { "type": "string", "description": "Status: active or inactive", "enum": ["active", "inactive"] },
+        "totalPurchase": { "type": "number", "description": "Total lifetime purchase amount in BDT" },
+        "totalPaid": { "type": "number", "description": "Total payment received to date in BDT" },
+        "totalReturned": { "type": "number", "description": "Total returned orders amount in BDT" },
+        "currentDue": { "type": "number", "description": "Current unpaid balance in BDT" },
+        "advanceBalance": { "type": "number", "description": "Customer unallocated advance deposit balance in BDT" },
+        "creditLimit": { "type": "number", "description": "Approved credit limit in BDT" },
+        "paymentTermDays": { "type": "number", "description": "Payment term credit days" },
+        "tradeLicenseNo": { "type": "string", "description": "Trade license number" },
+        "lastPaymentDate": { "type": "string", "description": "Timestamp of most recent payment transaction" },
+        "lastOrderDate": { "type": "string", "description": "Timestamp of most recent wholesale order" },
+        "createdAt": { "type": "string", "description": "Registration date timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" },
+        "createdBy": { "type": "string", "description": "User UID who registered this customer" }
+      },
+      "required": ["id", "shopName", "ownerName", "phone", "address", "district", "status", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "B2B Sales wholesale order with itemized inventory reservation and financial tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Order unique document ID" },
+        "orderId": { "type": "string", "description": "Order reference identifier" },
+        "orderNumber": { "type": "string", "description": "Order alphanumeric invoice code e.g. ORD-2026-1001" },
+        "customerId": { "type": "string", "description": "Customer retail shop document ID" },
+        "customerName": { "type": "string", "description": "Retail shop or customer name" },
+        "shopName": { "type": "string", "description": "Retail shop trade name" },
+        "ownerName": { "type": "string", "description": "Proprietor name" },
+        "customerPhone": { "type": "string", "description": "Customer contact phone" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "customerAddress": { "type": "string", "description": "Delivery address" },
+        "address": { "type": "string", "description": "Shop street address" },
+        "area": { "type": "string", "description": "Neighborhood or police station area" },
+        "district": { "type": "string", "description": "District in Bangladesh" },
+        "salesUserId": { "type": "string", "description": "Sales representative User UID" },
+        "salesUserName": { "type": "string", "description": "Sales representative name" },
+        "salesSellerId": { "type": "string", "description": "Sales representative identifier" },
+        "salesSellerName": { "type": "string", "description": "Sales representative name" },
+        "deliveryStaffId": { "type": "string", "description": "Assigned delivery staff ID" },
+        "deliveryStaffName": { "type": "string", "description": "Assigned delivery courier name" },
+        "items": {
+          "type": "array",
+          "description": "Ordered line items",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "sku": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unitPrice": { "type": "number" },
+              "discount": { "type": "number" },
+              "subtotal": { "type": "number" },
+              "mrp": { "type": "number" },
+              "unit": { "type": "string" }
+            },
+            "required": ["productId", "productName", "sku", "quantity", "unitPrice", "subtotal"]
+          }
+        },
+        "subtotal": { "type": "number", "description": "Sum of item subtotals before discounts in BDT" },
+        "totalDiscount": { "type": "number", "description": "Total discount given in BDT" },
+        "discount": { "type": "number", "description": "Order level discount amount in BDT" },
+        "grandTotal": { "type": "number", "description": "Final invoice total in BDT" },
+        "totalAmount": { "type": "number", "description": "Final invoice amount in BDT" },
+        "paidAmount": { "type": "number", "description": "Amount paid at order booking in BDT" },
+        "dueAmount": { "type": "number", "description": "Remaining due amount in BDT" },
+        "orderStatus": { "type": "string", "description": "Order fulfillment status", "enum": ["Draft", "Pending", "Confirmed", "Cancelled", "Completed", "Returned", "pending", "confirmed", "processing", "dispatched", "delivered", "returned", "cancelled"] },
+        "paymentStatus": { "type": "string", "description": "Payment settlement status", "enum": ["Unpaid", "Partially Paid", "Paid", "unpaid", "partial", "paid"] },
+        "deliveryStatus": { "type": "string", "description": "Logistics delivery status" },
+        "paymentMethod": { "type": "string", "description": "Payment instrument used" },
+        "notes": { "type": "string", "description": "Order special notes or delivery instructions" },
+        "stockDeducted": { "type": "boolean", "description": "Flag indicating if inventory stock was decremented" },
+        "stockRestored": { "type": "boolean", "description": "Flag indicating if inventory stock was returned" },
+        "confirmedAt": { "type": "string", "description": "Timestamp when order was confirmed" },
+        "confirmedBy": { "type": "string", "description": "User UID who confirmed order" },
+        "cancelledAt": { "type": "string", "description": "Timestamp when order was cancelled" },
+        "cancelledBy": { "type": "string", "description": "User UID who cancelled order" },
+        "returnedAt": { "type": "string", "description": "Timestamp when order was marked returned" },
+        "returnedBy": { "type": "string", "description": "User UID who marked order returned" },
+        "assignedAt": { "type": "string", "description": "Timestamp when delivery staff was assigned" },
+        "assignedBy": { "type": "string", "description": "User UID who assigned delivery staff" },
+        "assignedByName": { "type": "string", "description": "User name who assigned delivery staff" },
+        "failureReason": { "type": "string", "description": "Reason for delivery failure" },
+        "failedAt": { "type": "string", "description": "Timestamp when delivery attempt failed" },
+        "deliveryAttemptCount": { "type": "number", "description": "Total number of failed delivery attempts" },
+        "createdDate": { "type": "string", "description": "Order date formatted" },
+        "createdAt": { "type": "string", "description": "Creation ISO date" },
+        "updatedAt": { "type": "string", "description": "Last updated ISO date" },
+        "createdBy": { "type": "string", "description": "User UID who created this order" }
+      },
+      "required": ["id", "orderNumber", "customerId", "items", "subtotal", "grandTotal", "orderStatus", "paymentStatus", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment collection receipts and remittances",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Payment document ID" },
+        "paymentId": { "type": "string", "description": "Payment reference code" },
+        "paymentNumber": { "type": "string", "description": "Payment number format GLW-PAY-YYYYMMDD-XXXX" },
+        "customerId": { "type": "string", "description": "Referenced customer ID" },
+        "customerName": { "type": "string", "description": "Customer retail shop name" },
+        "orderId": { "type": "string", "description": "Optional associated order document ID" },
+        "orderNumber": { "type": "string", "description": "Optional associated order number" },
+        "amount": { "type": "number", "description": "Collected amount in BDT (positive integer)" },
+        "paymentMethod": { "type": "string", "description": "Instrument: Cash, bKash, Nagad, Bank Transfer, Other", "enum": ["Cash", "bKash", "Nagad", "Bank Transfer", "Other"] },
+        "paymentType": { "type": "string", "description": "Classification: Order Payment, Due Collection, Advance Payment, Adjustment, Reversal", "enum": ["Order Payment", "Due Collection", "Advance Payment", "Adjustment", "Reversal"] },
+        "collectedByUserId": { "type": "string", "description": "User UID who collected payment" },
+        "collectedByUserName": { "type": "string", "description": "Name of user who collected payment" },
+        "collectedByUserRole": { "type": "string", "description": "Role of user who collected payment" },
+        "notes": { "type": "string", "description": "Collection transaction notes" },
+        "isReversed": { "type": "boolean", "description": "Flag if payment has been reversed" },
+        "reversedAt": { "type": "string", "description": "Timestamp of reversal" },
+        "reversedByUserId": { "type": "string", "description": "User UID who authorized reversal" },
+        "reversedByUserName": { "type": "string", "description": "Name of user who authorized reversal" },
+        "reversalReason": { "type": "string", "description": "Reason for transaction reversal" },
+        "reversalOfPaymentId": { "type": "string", "description": "Original payment document ID if this is a reversal" },
+        "createdAt": { "type": "string", "description": "Transaction creation ISO date" },
+        "createdBy": { "type": "string", "description": "User UID who created record" }
+      },
+      "required": ["id", "paymentNumber", "customerId", "customerName", "amount", "paymentMethod", "paymentType", "collectedByUserId", "collectedByUserName", "createdAt", "createdBy"]
+    },
+    "CustomerLedger": {
+      "title": "CustomerLedger",
+      "description": "Chronological transaction-based audit ledger for customer debit and credit accounting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Ledger entry document ID" },
+        "ledgerId": { "type": "string", "description": "Ledger reference code" },
+        "customerId": { "type": "string", "description": "Referenced customer ID" },
+        "customerName": { "type": "string", "description": "Customer retail shop name" },
+        "type": { "type": "string", "description": "Transaction type: SALE, PAYMENT, RETURN, ADJUSTMENT", "enum": ["SALE", "PAYMENT", "RETURN", "ADJUSTMENT"] },
+        "referenceId": { "type": "string", "description": "Referenced document ID (orderId, paymentId, etc.)" },
+        "referenceNumber": { "type": "string", "description": "Referenced document number (ORD-xxx, GLW-PAY-xxx)" },
+        "debit": { "type": "number", "description": "Debit amount increasing customer balance in BDT" },
+        "credit": { "type": "number", "description": "Credit amount decreasing customer balance in BDT" },
+        "balanceAfterTransaction": { "type": "number", "description": "Customer running balance after this transaction" },
+        "description": { "type": "string", "description": "Transaction details and notes" },
+        "performedByUserId": { "type": "string", "description": "User UID who performed action" },
+        "performedByUserName": { "type": "string", "description": "Name of user who performed action" },
+        "createdAt": { "type": "string", "description": "Transaction timestamp" }
+      },
+      "required": ["id", "customerId", "customerName", "type", "referenceId", "referenceNumber", "debit", "credit", "balanceAfterTransaction", "description", "performedByUserId", "performedByUserName", "createdAt"]
+    },
+    "DeliveryHistory": {
+      "title": "DeliveryHistory",
+      "description": "Logistics delivery status transition and attempt history audit trail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Delivery history entry ID" },
+        "historyId": { "type": "string", "description": "History reference code" },
+        "orderId": { "type": "string", "description": "Associated order ID" },
+        "orderNumber": { "type": "string", "description": "Associated order invoice number" },
+        "previousStatus": { "type": "string", "description": "Delivery status before transition" },
+        "newStatus": { "type": "string", "description": "Delivery status after transition" },
+        "deliveryStaffId": { "type": "string", "description": "Assigned delivery staff ID" },
+        "deliveryStaffName": { "type": "string", "description": "Assigned delivery staff name" },
+        "performedBy": { "type": "string", "description": "User UID who recorded status transition" },
+        "performedByName": { "type": "string", "description": "Name of user who recorded status transition" },
+        "notes": { "type": "string", "description": "Transition details or notes" },
+        "failureReason": { "type": "string", "description": "Optional failure reason if status is failed" },
+        "createdAt": { "type": "string", "description": "Transition timestamp" }
+      },
+      "required": ["id", "historyId", "orderId", "previousStatus", "newStatus", "performedBy", "performedByName", "createdAt"]
+    },
+    "CashHandover": {
+      "title": "CashHandover",
+      "description": "Delivery courier cash pouch handover request to HQ Cashier",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Handover document ID" },
+        "driverId": { "type": "string", "description": "Delivery courier User UID or staff ID" },
+        "driverName": { "type": "string", "description": "Delivery courier full name" },
+        "amount": { "type": "number", "description": "Handover cash amount in BDT" },
+        "collectionIds": {
+          "type": "array",
+          "description": "List of payment/collection document IDs included in this handover",
+          "items": { "type": "string" }
+        },
+        "status": { "type": "string", "description": "Handover status: pending, accepted, or rejected", "enum": ["pending", "accepted", "rejected"] },
+        "submittedAt": { "type": "string", "description": "Submission ISO timestamp" },
+        "reviewedAt": { "type": "string", "description": "Verification ISO timestamp" },
+        "reviewedByUserId": { "type": "string", "description": "HQ Cashier User UID" },
+        "reviewedByUserName": { "type": "string", "description": "HQ Cashier name" },
+        "rejectionReason": { "type": "string", "description": "Reason if handover was rejected" },
+        "notes": { "type": "string", "description": "Handover notes" }
+      },
+      "required": ["id", "driverId", "driverName", "amount", "collectionIds", "status", "submittedAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Operating expense record for business financial accounting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Expense document ID" },
+        "expenseNumber": { "type": "string", "description": "Expense identifier e.g. GLW-EXP-20260822-0001" },
+        "category": { "type": "string", "description": "Expense category e.g. Rent, Utilities, Fuel & Transport, etc." },
+        "amount": { "type": "number", "description": "Expense BDT amount as integer" },
+        "title": { "type": "string", "description": "Expense title or summary" },
+        "description": { "type": "string", "description": "Detailed notes or invoice reference" },
+        "paymentMethod": { "type": "string", "description": "Payment instrument e.g. Cash, Bank Transfer, bKash, Nagad" },
+        "vendorName": { "type": "string", "description": "Vendor or payee name" },
+        "spentByUserId": { "type": "string", "description": "User UID who incurred expense" },
+        "spentByUserName": { "type": "string", "description": "Name of user who incurred expense" },
+        "approvedByUserId": { "type": "string", "description": "Admin User UID who approved expense" },
+        "approvedByUserName": { "type": "string", "description": "Admin name who approved expense" },
+        "approvedAt": { "type": "string", "description": "Approval ISO timestamp" },
+        "status": { "type": "string", "description": "Status: pending, approved, or rejected", "enum": ["pending", "approved", "rejected"] },
+        "expenseDate": { "type": "string", "description": "Date of expense in YYYY-MM-DD" },
+        "rejectionReason": { "type": "string", "description": "Reason for rejection if applicable" },
+        "deleted": { "type": "boolean", "description": "Soft deletion flag" },
+        "deletedAt": { "type": "string", "description": "Soft deletion ISO timestamp" },
+        "deletedByUserId": { "type": "string", "description": "User UID who soft deleted the record" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated ISO timestamp" }
+      },
+      "required": ["id", "expenseNumber", "category", "amount", "title", "paymentMethod", "spentByUserId", "spentByUserName", "status", "expenseDate", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Administrative actions and staff security audit trail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Audit log unique document ID" },
+        "action": { "type": "string", "description": "Action performed e.g. STAFF_ACCOUNT_CREATED, STAFF_ACCOUNT_DISABLED, STAFF_ACCOUNT_ENABLED, STAFF_ROLE_CHANGED, STAFF_PASSWORD_RESET, STAFF_PROFILE_UPDATED" },
+        "targetUserId": { "type": "string", "description": "Target staff user UID" },
+        "targetUserName": { "type": "string", "description": "Target staff member name" },
+        "targetRole": { "type": "string", "description": "Target staff role" },
+        "performedByUserId": { "type": "string", "description": "Admin UID who executed the action" },
+        "performedByUserName": { "type": "string", "description": "Admin user display name" },
+        "details": { "type": "string", "description": "Detailed description of action" },
+        "timestamp": { "type": "string", "description": "Timestamp of action" }
+      },
+      "required": ["action", "targetUserId", "targetUserName", "targetRole", "performedByUserId", "performedByUserName", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user profiles with RBAC permissions"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable administrative audit logs collection"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories and subcategories catalog"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Central B2B products catalog and live inventory"
+    },
+    "/inventoryTransactions/{transactionId}": {
+      "schema": "InventoryTransaction",
+      "description": "Immutable inventory stock movement and audit logs"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "B2B retail shops and business customers directory"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "B2B wholesale sales orders collection"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment receipts and remittance collection records"
+    },
+    "/customerLedger/{ledgerId}": {
+      "schema": "CustomerLedger",
+      "description": "Transaction-based immutable customer debit and credit accounting ledger"
+    },
+    "/deliveryHistory/{historyId}": {
+      "schema": "DeliveryHistory",
+      "description": "Delivery status audit trail log"
+    },
+    "/cash_handovers/{handoverId}": {
+      "schema": "CashHandover",
+      "description": "Delivery driver cash handover requests to HQ cashier"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Operating expenses records for financial accounting and P&L"
+    }
+  }
+}

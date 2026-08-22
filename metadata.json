@@ -1,0 +1,6 @@
+{
+  "name": "Glowzaa B2B Distribution Management",
+  "description": "Professional B2B distribution and supply chain management system for Glowzaa beauty, personal care, fashion accessories, kids, and lifestyle wholesale network in Bangladesh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function to check if user is Admin
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'rakibseohub@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Helper function to check if user is Sales
+    function isSales() {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sales');
+    }
+
+    // Helper function to check if user is Delivery
+    function isDelivery() {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'delivery');
+    }
+
+    // Users Collection rules: All authenticated staff can read staff list; Admin can create/update/delete any user; Users can update own profile, but CANNOT modify role, permissions, status, loginId, or isAdmin.
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (
+        isOwner(userId) && 
+        request.resource.data.role != 'admin' && 
+        (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin != true)
+      );
+      allow update: if isAdmin() || (
+        isOwner(userId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'isAdmin', 'status', 'loginId'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Audit Logs Collection rules: Immutable administrative & security event logs
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Categories Collection rules: Any authenticated user can read; only Admin can create/edit/delete
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Products Collection rules: Any authenticated user can read; only Admin can create/edit/delete/adjust
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Inventory Transactions Collection rules: Any authenticated user can read; authenticated users performing transactions can create; immutable logs
+    match /inventoryTransactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Customers Collection rules: All authenticated staff can read; Admin and Sales can create/update; Delivery can ONLY update payment balance fields; Only Admin can delete
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isSales();
+      allow update: if isAdmin() || isSales() || (
+        isDelivery() && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'creditLimit', 'shopName', 'ownerName', 'phone', 'alternatePhone', 
+          'email', 'address', 'area', 'city', 'district', 'notes', 
+          'assignedSalesUserId', 'assignedSalesUserName', 'totalPurchase', 
+          'totalReturned', 'paymentTermDays', 'status', 'tradeLicenseNo'
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Orders Collection rules: All authenticated staff can read; authenticated staff can create; Admin full update; Sales update own orders (no salesUserId change, no financial total edits post-confirmation); Delivery update assigned orders only (no financial total or item edits); Only Admin can delete
+    match /orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || (
+        isSales() && 
+        (resource.data.salesUserId == request.auth.uid || resource.data.createdBy == request.auth.uid || !('salesUserId' in resource.data) || resource.data.salesUserId == '') &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['salesUserId']) &&
+        (
+          (resource.data.orderStatus in ['draft', 'pending', 'Draft', 'Pending']) ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['grandTotal', 'subtotal', 'totalDiscount', 'discount', 'totalAmount', 'items'])
+        )
+      ) || (
+        isDelivery() && 
+        resource.data.deliveryStaffId == request.auth.uid &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'grandTotal', 'subtotal', 'totalDiscount', 'discount', 'totalAmount', 
+          'items', 'stockDeducted', 'stockRestored', 'salesUserId', 'customerId', 
+          'deliveryStaffId', 'shopName', 'ownerName'
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Payments Collection rules: All authenticated staff can read; authenticated users can create/reverse; Permanent deletion is disallowed
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Customer Ledger Collection rules: All authenticated staff can read; authenticated users can append ledger entries; Direct update and deletion forbidden (immutable audit ledger)
+    match /customerLedger/{ledgerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Delivery History Collection rules: All authenticated staff can read; authenticated users can append history entries; Direct update and deletion forbidden (immutable audit history)
+    match /deliveryHistory/{historyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Cash Handovers Collection rules: All authenticated staff can read; authenticated staff can create handover requests; Admin can update (accept/reject); Permanent deletion disallowed
+    match /cash_handovers/{handoverId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Expenses Collection rules: All authenticated staff can read; staff can create expense claims; Admin can update/approve/delete; Staff can only edit own pending expenses
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (
+        isAuthenticated() && 
+        request.resource.data.status == 'pending' && 
+        request.resource.data.spentByUserId == request.auth.uid && 
+        (!('approvedByUserId' in request.resource.data) || request.resource.data.approvedByUserId == null) && 
+        (!('approvedByUserName' in request.resource.data) || request.resource.data.approvedByUserName == null) && 
+        (!('approvedAt' in request.resource.data) || request.resource.data.approvedAt == null) && 
+        (!('deleted' in request.resource.data) || request.resource.data.deleted == false) && 
+        (!('deletedByUserId' in request.resource.data) || request.resource.data.deletedByUserId == null) && 
+        (!('deletedAt' in request.resource.data) || request.resource.data.deletedAt == null)
+      );
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        resource.data.spentByUserId == request.auth.uid && 
+        resource.data.status == 'pending' && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'status', 'approvedByUserId', 'approvedByUserName', 'approvedAt', 'rejectionReason',
+          'spentByUserId', 'deleted', 'deletedAt', 'deletedByUserId'
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+
+
+  }
+}
