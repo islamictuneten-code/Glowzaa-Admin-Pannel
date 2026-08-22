@@ -37,9 +37,11 @@ export const db = firestoreInstance;
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, '_health', 'connection'));
-  } catch (error) {
-    if (error instanceof Error) {
-      console.warn("Firestore offline/retry notice:", error.message);
+  } catch (error: any) {
+    // Suppress benign connection closing/hidden/offline warnings in console
+    const msg = error?.message || '';
+    if (!msg.includes('Database is closing') && !msg.includes('offline')) {
+      console.warn("Firestore status notice:", msg);
     }
   }
 }
