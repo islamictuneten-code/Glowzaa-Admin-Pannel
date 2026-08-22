@@ -489,63 +489,66 @@ export const AdminStaff: React.FC = () => {
 
     setIsSubmittingEdit(true);
 
-    let updatedPhotoURL: string | undefined = undefined;
+    try {
+      let updatedPhotoURL: string | undefined = undefined;
 
-    // 1. If new photo was selected, compress & upload to Firebase Storage
-    if (editPhotoFile) {
-      const uploadRes = await uploadStaffProfilePhoto(
-        editPhotoFile,
-        selectedStaff.uid,
-        activeAdminUser?.uid || 'admin'
-      );
-      if (uploadRes.success && uploadRes.downloadURL) {
-        updatedPhotoURL = uploadRes.downloadURL;
-      } else {
-        setIsSubmittingEdit(false);
-        setEditError(uploadRes.error || 'Failed to upload profile photo to storage.');
-        return;
+      // 1. If new photo was selected, compress & upload to Firebase Storage
+      if (editPhotoFile) {
+        const uploadRes = await uploadStaffProfilePhoto(
+          editPhotoFile,
+          selectedStaff.uid,
+          activeAdminUser?.uid || 'admin'
+        );
+        if (uploadRes.success && uploadRes.downloadURL) {
+          updatedPhotoURL = uploadRes.downloadURL;
+        } else {
+          setEditError(uploadRes.error || 'Failed to upload profile photo to storage.');
+          return;
+        }
+      } else if (editPhotoRemoved) {
+        // Photo explicitly removed
+        updatedPhotoURL = '';
       }
-    } else if (editPhotoRemoved) {
-      // Photo explicitly removed
-      updatedPhotoURL = '';
-    }
 
-    const zonesArray = selectedStaff.role === 'delivery' 
-      ? editForm.assignedZones.split(',').map(z => z.trim()).filter(Boolean)
-      : undefined;
+      const zonesArray = selectedStaff.role === 'delivery' 
+        ? editForm.assignedZones.split(',').map(z => z.trim()).filter(Boolean)
+        : undefined;
 
-    const res = await updateStaffProfile(
-      selectedStaff.uid,
-      {
-        name: editForm.name.trim(),
-        phone: editForm.phone.trim(),
-        title: editForm.title.trim(),
-        department: editForm.department.trim(),
-        territory: selectedStaff.role === 'sales' ? editForm.territory.trim() : undefined,
-        monthlyTarget: selectedStaff.role === 'sales' ? Number(editForm.monthlyTarget) : undefined,
-        commissionRate: selectedStaff.role === 'sales' ? Number(editForm.commissionRate) : undefined,
-        vehicleType: selectedStaff.role === 'delivery' ? editForm.vehicleType : undefined,
-        vehicleNumber: selectedStaff.role === 'delivery' ? editForm.vehicleNumber.trim() : undefined,
-        assignedZones: zonesArray,
-        ...(updatedPhotoURL !== undefined ? { photoURL: updatedPhotoURL } : {})
-      },
-      activeAdminUser?.uid || 'admin',
-      activeAdminUser?.name || 'Administrator',
-      selectedStaff.loginId || selectedStaff.email
-    );
+      const res = await updateStaffProfile(
+        selectedStaff.uid,
+        {
+          name: editForm.name.trim(),
+          phone: editForm.phone.trim(),
+          title: editForm.title.trim(),
+          department: editForm.department.trim(),
+          territory: selectedStaff.role === 'sales' ? editForm.territory.trim() : undefined,
+          monthlyTarget: selectedStaff.role === 'sales' ? Number(editForm.monthlyTarget) : undefined,
+          commissionRate: selectedStaff.role === 'sales' ? Number(editForm.commissionRate) : undefined,
+          vehicleType: selectedStaff.role === 'delivery' ? editForm.vehicleType : undefined,
+          vehicleNumber: selectedStaff.role === 'delivery' ? editForm.vehicleNumber.trim() : undefined,
+          assignedZones: zonesArray,
+          ...(updatedPhotoURL !== undefined ? { photoURL: updatedPhotoURL } : {})
+        },
+        activeAdminUser?.uid || 'admin',
+        activeAdminUser?.name || 'Administrator',
+        selectedStaff.loginId || selectedStaff.email
+      );
 
-    setIsSubmittingEdit(false);
-
-    if (res.success) {
-      addToast({
-        type: 'success',
-        title: 'Profile Updated',
-        message: `Updated profile details for ${editForm.name}.`
-      });
-      setIsEditModalOpen(false);
-      loadStaffList();
-    } else {
-      setEditError(res.error || 'Failed to update staff profile.');
+      if (res.success) {
+        addToast({
+          type: 'success',
+          title: 'Profile Updated',
+          message: `Updated profile details for ${editForm.name}.`
+        });
+        setIsEditModalOpen(false);
+        loadStaffList();
+      } else {
+        setEditError(res.error || 'Failed to update staff profile.');
+      }
+    } catch (err: any) {
+      setEditError(err?.message || 'An unexpected error occurred during update.');
+    } finally {
+      setIsSubmittingEdit(false);
     }
   };
 

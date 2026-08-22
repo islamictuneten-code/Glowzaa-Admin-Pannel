@@ -255,12 +255,13 @@ export async function updateStaffProfile(
     const admin = normalizeAdminUser(adminUser, adminNameFallback);
     const userRef = doc(db, 'users', userId);
     const existingSnap = await getDoc(userRef);
-    if (!existingSnap.exists()) {
-      return { success: false, error: 'Staff user profile not found.' };
+    
+    let existingData: Partial<AuthUser> = {};
+    if (existingSnap.exists()) {
+      existingData = existingSnap.data() as AuthUser;
     }
 
-    const existingData = existingSnap.data() as AuthUser;
-    const isRoleChanged = updates.role && updates.role !== existingData.role;
+    const isRoleChanged = updates.role && existingData.role && updates.role !== existingData.role;
 
     const payload: Partial<AuthUser> = {
       ...updates,
@@ -272,22 +273,27 @@ export async function updateStaffProfile(
       payload.avatar = getAvatarInitials(updates.name);
     }
 
-    await updateDoc(userRef, cleanUndefined(payload) as any);
+    // Use setDoc with merge: true so it creates or updates seamlessly even if synthesized
+    await setDoc(userRef, cleanUndefined(payload), { merge: true });
 
     // Write audit log
-    await addDoc(collection(db, 'audit_logs'), cleanUndefined({
-      action: isRoleChanged ? 'STAFF_ROLE_CHANGED' : 'STAFF_PROFILE_UPDATED',
-      targetUserId: userId,
-      targetUserLoginId: targetLoginId || existingData.loginId || existingData.email,
-      targetUserName: updates.name || existingData.name,
-      targetRole: updates.role || existingData.role,
-      performedByUserId: admin.uid,
-      performedByUserName: admin.name || 'Administrator',
-      timestamp: new Date().toISOString(),
-      details: isRoleChanged 
-        ? `Role updated from ${existingData.role.toUpperCase()} to ${updates.role?.toUpperCase()}`
-        : `Staff profile updated for ${existingData.name}`
-    }));
+    try {
+      await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+        action: isRoleChanged ? 'STAFF_ROLE_CHANGED' : 'STAFF_PROFILE_UPDATED',
+        targetUserId: userId,
+        targetUserLoginId: targetLoginId || existingData.loginId || existingData.email || userId,
+        targetUserName: updates.name || existingData.name || 'Staff User',
+        targetRole: updates.role || existingData.role || 'sales',
+        performedByUserId: admin.uid,
+        performedByUserName: admin.name || 'Administrator',
+        timestamp: new Date().toISOString(),
+        details: isRoleChanged 
+          ? `Role updated from ${(existingData.role || 'unknown').toUpperCase()} to ${updates.role?.toUpperCase()}`
+          : `Staff profile updated for ${updates.name || existingData.name || userId}`
+      }));
+    } catch (auditErr) {
+      console.warn('Audit log write notice:', auditErr);
+    }
 
     return { success: true };
   } catch (error: any) {
