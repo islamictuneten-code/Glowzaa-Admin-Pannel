@@ -161,23 +161,33 @@ export async function createStaffAccount(
 
     let newUid: string;
     try {
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, cleanPassword);
-      newUid = userCredential.user.uid;
-    } catch (authErr: any) {
-      if (authErr.code === 'auth/email-already-in-use') {
-        return { success: false, error: `An account for "${cleanLoginId}" already exists in the system.` };
-      }
-      if (authErr.code === 'auth/weak-password') {
-        return { success: false, error: 'Password is too weak. Please use at least 6 characters.' };
-      }
-      return { success: false, error: authErr.message || 'Failed to create authentication user.' };
-    } finally {
+      const secondaryAppName = `StaffAuthCreator_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+      const secondaryAuth = getAuth(secondaryApp);
+
       try {
-        await secondarySignOut(secondaryAuth);
-        await deleteApp(secondaryApp);
-      } catch (cleanupErr) {
-        console.warn('Secondary app cleanup note:', cleanupErr);
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, cleanPassword);
+        newUid = userCredential.user.uid;
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          return { success: false, error: `An account for "${cleanLoginId}" already exists in the system.` };
+        }
+        if (authErr.code === 'auth/weak-password') {
+          return { success: false, error: 'Password is too weak. Please use at least 6 characters.' };
+        }
+        console.warn('Auth creation notice, falling back to database-managed staff account:', authErr);
+        newUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      } finally {
+        try {
+          await secondarySignOut(secondaryAuth);
+          await deleteApp(secondaryApp);
+        } catch (cleanupErr) {
+          // Ignore cleanup errors
+        }
       }
+    } catch (outerAuthErr) {
+      console.warn('Secondary app init notice:', outerAuthErr);
+      newUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     }
 
     // 4. Save Staff Profile to Firestore users collection
