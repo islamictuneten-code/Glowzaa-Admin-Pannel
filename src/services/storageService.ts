@@ -142,34 +142,43 @@ export async function uploadStaffProfilePhoto(
 
     const { blob, mimeType, extension } = await compressAndResizeImage(file);
     
-    // Primary: Upload to Firebase Storage and get canonical HTTPS download URL
+    // Always convert to high-quality compressed base64 data URL first
+    const base64Url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to convert image to base64'));
+      reader.readAsDataURL(blob);
+    });
+
+    // Try uploading to Firebase Storage with a strict 3.5s timeout race
     try {
       const timestamp = Date.now();
       const storageRef = ref(storage, `staff_avatars/${userId}_${timestamp}.${extension}`);
-      const uploadResult = await uploadBytes(storageRef, blob, {
-        contentType: mimeType,
-        customMetadata: {
-          uploadedBy: performedByUserId,
-          userId: userId,
-          uploadedAt: new Date().toISOString()
-        }
+      
+      const uploadPromise = (async () => {
+        const uploadResult = await uploadBytes(storageRef, blob, {
+          contentType: mimeType,
+          customMetadata: {
+            uploadedBy: performedByUserId,
+            userId: userId,
+            uploadedAt: new Date().toISOString()
+          }
+        });
+        return await getDownloadURL(uploadResult.ref);
+      })();
+
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error('Firebase storage upload request timed out after 3.5 seconds')), 3500);
       });
-      const downloadURL = await getDownloadURL(uploadResult.ref);
+
+      const downloadURL = await Promise.race([uploadPromise, timeoutPromise]);
       return {
         success: true,
         downloadUrl: downloadURL,
         downloadURL: downloadURL
       };
     } catch (storageErr: any) {
-      console.warn('Firebase Storage upload notice, falling back if offline:', storageErr);
-      // Fallback only if Firebase Storage upload fails (e.g. offline preview)
-      const base64Url = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Failed to convert image to base64'));
-        reader.readAsDataURL(blob);
-      });
-
+      console.warn('Firebase Storage upload notice, using compressed base64 photo fallback:', storageErr?.message || storageErr);
       return {
         success: true,
         downloadUrl: base64Url,

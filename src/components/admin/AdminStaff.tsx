@@ -407,10 +407,11 @@ export const AdminStaff: React.FC = () => {
               res.user.uid, 
               activeAdminUser?.uid || 'admin'
             );
-            if (uploadRes.success && uploadRes.downloadURL) {
+            const photoUrl = uploadRes.downloadURL || uploadRes.downloadUrl;
+            if (uploadRes.success && photoUrl) {
               await updateStaffProfile(
                 res.user.uid,
-                { photoURL: uploadRes.downloadURL },
+                { photoURL: photoUrl },
                 activeAdminUser?.uid || 'admin',
                 activeAdminUser?.name || 'Administrator',
                 createForm.loginId.trim()
@@ -519,8 +520,9 @@ export const AdminStaff: React.FC = () => {
           selectedStaff.uid,
           activeAdminUser?.uid || 'admin'
         );
-        if (uploadRes.success && uploadRes.downloadURL) {
-          updatedPhotoURL = uploadRes.downloadURL;
+        const photoUrl = uploadRes.downloadURL || uploadRes.downloadUrl;
+        if (uploadRes.success && photoUrl) {
+          updatedPhotoURL = photoUrl;
         } else {
           setEditError(uploadRes.error || 'Failed to upload profile photo to storage.');
           return;
