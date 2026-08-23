@@ -93,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
     });
   };
 
-  const activeRoleBadge = roleBadgeStyles[role];
+  const activeRoleBadge = roleBadgeStyles[role] || roleBadgeStyles.admin;
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-2xs h-16">

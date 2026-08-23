@@ -406,12 +406,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       } else if (currentUser.role === 'delivery') {
-        const match = deliveryStaff.find(d => d.id === currentUser.staffId || (d as any).uid === currentUser.uid || d.email.toLowerCase() === currentUser.email.toLowerCase());
+        const match = deliveryStaff.find(d => d.id === currentUser.staffId || (d as any).uid === currentUser.uid || (d.email && d.email.toLowerCase() === currentUser.email.toLowerCase()));
         if (match) {
           setCurrentDeliveryUser({
             ...match,
             photoURL: currentUser.photoURL || match.photoURL,
-            id: match.id || currentUser.uid
+            id: match.id || currentUser.uid,
+            name: match.name || currentUser.name || 'Delivery Courier',
+            email: match.email || currentUser.email,
+            phone: match.phone || currentUser.phone || '+880 1700-000000',
+            assignedArea: match.assignedArea || currentUser.assignedArea || 'Dhaka Route',
+            assignedZones: (match.assignedZones && match.assignedZones.length > 0) ? match.assignedZones : (currentUser.assignedZones || ['Dhaka Central']),
+            vehicleNumber: match.vehicleNumber || currentUser.vehicleNumber || 'Dhaka-Metro-D-01',
+            vehicleType: match.vehicleType || (currentUser.vehicleType as any) || 'Delivery Van',
+            activeDeliveriesToday: match.activeDeliveriesToday || 0,
+            completedDeliveriesToday: match.completedDeliveriesToday || 0,
+            cashInHand: match.cashInHand || 0,
+            avatar: match.avatar || currentUser.avatar || 'D',
+            status: match.status || 'on_duty'
           });
         } else {
           setCurrentDeliveryUser({

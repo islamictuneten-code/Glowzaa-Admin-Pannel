@@ -26,13 +26,18 @@ export const MobileBottomNav: React.FC = () => {
   } = useApp();
 
   // Badges & Counters
-  const pendingOrdersCount = orders.filter(o => o.orderStatus === 'pending' || o.orderStatus === 'processing').length;
-  const lowStockCount = products.filter(p => p.status === 'low_stock' || p.status === 'out_of_stock').length;
-  const myPendingSalesOrders = orders.filter(
-    o => o.salesSellerId === currentSalesUser.id && (o.orderStatus === 'pending' || o.orderStatus === 'processing')
+  const pendingOrdersCount = (orders || []).filter(o => o && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
+  const lowStockCount = (products || []).filter(p => p && (p.status === 'low_stock' || p.status === 'out_of_stock')).length;
+  
+  const salesUserId = currentSalesUser?.id || '';
+  const deliveryUserId = currentDeliveryUser?.id || '';
+  const deliveryUserUid = (currentDeliveryUser as any)?.uid || '';
+
+  const myPendingSalesOrders = (orders || []).filter(
+    o => o && salesUserId && o.salesSellerId === salesUserId && (o.orderStatus === 'pending' || o.orderStatus === 'processing')
   ).length;
-  const myPendingDeliveries = orders.filter(
-    o => o.deliveryStaffId === currentDeliveryUser.id && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')
+  const myPendingDeliveries = (orders || []).filter(
+    o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')
   ).length;
 
   // Role-specific 4-item navigation menu configurations

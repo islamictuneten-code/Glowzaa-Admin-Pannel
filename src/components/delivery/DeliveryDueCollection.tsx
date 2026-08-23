@@ -33,14 +33,16 @@ export const DeliveryDueCollection: React.FC = () => {
   // Shops in my delivery zone that have outstanding due
   const assignedZonesList = currentDeliveryUser.assignedZones || [currentDeliveryUser.assignedArea || ''];
   const zoneCustomersWithDue = customers.filter(
-    c => (assignedZonesList.length === 0 || assignedZonesList.some(z => !z || c.area.toLowerCase().includes(z.toLowerCase()) || z.toLowerCase().includes(c.area.toLowerCase()))) && c.currentDue > 0
+    c => c && (assignedZonesList.length === 0 || assignedZonesList.some(z => !z || (c.area || '').toLowerCase().includes(z.toLowerCase()) || z.toLowerCase().includes((c.area || '').toLowerCase()))) && (c.currentDue || 0) > 0
   );
 
   const filteredCustomers = zoneCustomersWithDue.filter(c =>
-    c.shopName.toLowerCase().includes(search.toLowerCase()) ||
-    c.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search) ||
-    c.area.toLowerCase().includes(search.toLowerCase())
+    c && (
+      (c.shopName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.ownerName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.phone || '').includes(search) ||
+      (c.area || '').toLowerCase().includes(search.toLowerCase())
+    )
   );
 
   const handleCollect = (e: React.FormEvent) => {

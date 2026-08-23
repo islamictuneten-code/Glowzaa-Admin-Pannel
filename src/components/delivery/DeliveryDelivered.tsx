@@ -35,10 +35,12 @@ export const DeliveryDelivered: React.FC = () => {
   );
 
   const filteredOrders = deliveredOrders.filter(o =>
-    o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-    o.shopName.toLowerCase().includes(search.toLowerCase()) ||
-    o.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-    o.area.toLowerCase().includes(search.toLowerCase())
+    o && (
+      (o.orderNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+      (o.shopName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (o.ownerName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (o.area || '').toLowerCase().includes(search.toLowerCase())
+    )
   );
 
   const totalDeliveredValue = deliveredOrders.reduce((sum, o) => sum + o.totalAmount, 0);

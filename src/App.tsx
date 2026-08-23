@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Component, ErrorInfo } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/layout/Header';
@@ -218,7 +218,9 @@ const AuthenticatedApp: React.FC = () => {
           />
 
           {/* Active View Container */}
-          <DashboardContent />
+          <ErrorBoundary>
+            <DashboardContent />
+          </ErrorBoundary>
         </div>
 
         {/* Fixed Mobile Bottom Navigation */}
@@ -233,11 +235,74 @@ const AuthenticatedApp: React.FC = () => {
   );
 };
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+interface ErrorBoundary {
+  props: ErrorBoundaryProps;
+  state: ErrorBoundaryState;
+  setState(state: Partial<ErrorBoundaryState> | ((prevState: ErrorBoundaryState) => Partial<ErrorBoundaryState>)): void;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Unhandled UI exception:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[400px] flex flex-col items-center justify-center p-6 text-center space-y-4 bg-white rounded-2xl border border-rose-100 shadow-sm m-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-xl border border-rose-200">
+            !
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Dashboard View Recovered</h2>
+          <p className="text-xs text-slate-600 max-w-md">
+            {this.state.error?.message || 'An unexpected state error occurred in this view module.'}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-[#087F7A] text-white font-semibold text-xs rounded-xl shadow-xs hover:bg-[#06635f] transition-colors cursor-pointer"
+          >
+            Refresh Dashboard
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App() {
   return (
-    <AuthProvider>
-      <AuthenticatedApp />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AuthenticatedApp />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

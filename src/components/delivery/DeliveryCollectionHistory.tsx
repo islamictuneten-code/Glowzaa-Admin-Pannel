@@ -24,13 +24,15 @@ export const DeliveryCollectionHistory: React.FC = () => {
     );
   }
 
-  const myCollections = collections.filter(c => c && currentDeliveryUser && c.collectorId === currentDeliveryUser.id);
+  const myCollections = collections.filter(c => c && currentDeliveryUser && (c.collectorId === currentDeliveryUser.id || c.collectorId === (currentDeliveryUser as any).uid));
 
   const filteredCollections = myCollections.filter(c =>
-    c.collectionNumber.toLowerCase().includes(search.toLowerCase()) ||
-    c.shopName.toLowerCase().includes(search.toLowerCase()) ||
-    c.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-    (c.referenceNo && c.referenceNo.toLowerCase().includes(search.toLowerCase()))
+    c && (
+      (c.collectionNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.shopName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.ownerName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.referenceNo && c.referenceNo.toLowerCase().includes(search.toLowerCase()))
+    )
   );
 
   const totalCollected = myCollections.reduce((sum, c) => sum + c.amount, 0);

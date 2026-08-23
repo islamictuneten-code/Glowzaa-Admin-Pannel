@@ -318,8 +318,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const sessionCreationTime = new Date(sessionCreatedAt || 0).getTime();
             const revocationTime = revokedAt ? new Date(revokedAt).getTime() : 0;
             const isCurrentSessionFound = rawSessions.some(s => s.sessionId === currentSessionId);
+            const isSessionBrandNew = (Date.now() - sessionCreationTime) < 15000;
 
-            if (revocationTime > sessionCreationTime && !isCurrentSessionFound) {
+            if (revocationTime > (sessionCreationTime + 2000) && !isCurrentSessionFound && !isSessionBrandNew) {
               try {
                 localStorage.removeItem('glowzaa_session_created_at');
               } catch {}

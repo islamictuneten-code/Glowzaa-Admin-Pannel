@@ -59,16 +59,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
   const { currentUser, logout } = useAuth();
 
   // Badges calculation
-  const pendingExpensesCount = expenses.filter(e => !e.deleted && e.status === 'pending').length;
-  const pendingOrdersCount = orders.filter(o => o.orderStatus === 'pending' || o.orderStatus === 'processing').length;
-  const packingOrdersCount = orders.filter(o => o.orderStatus === 'confirmed' || o.orderStatus === 'packing').length;
-  const lowStockCount = products.filter(p => p.status === 'low_stock' || p.status === 'out_of_stock').length;
-  const overdueCustomersCount = customers.filter(c => c.currentDue > 0).length;
+  const pendingExpensesCount = (expenses || []).filter(e => e && !e.deleted && e.status === 'pending').length;
+  const pendingOrdersCount = (orders || []).filter(o => o && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
+  const packingOrdersCount = (orders || []).filter(o => o && (o.orderStatus === 'confirmed' || o.orderStatus === 'packing')).length;
+  const lowStockCount = (products || []).filter(p => p && (p.status === 'low_stock' || p.status === 'out_of_stock')).length;
+  const overdueCustomersCount = (customers || []).filter(c => c && (c.currentDue || 0) > 0).length;
   
-  const myPendingSalesOrders = orders.filter(o => o.salesSellerId === currentSalesUser.id && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
-  const myPendingDeliveries = orders.filter(o => o.deliveryStaffId === currentDeliveryUser.id && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')).length;
-  const myCompletedToday = orders.filter(o => o.deliveryStaffId === currentDeliveryUser.id && o.orderStatus === 'delivered').length;
-  const myReturnedCount = orders.filter(o => o.deliveryStaffId === currentDeliveryUser.id && o.orderStatus === 'returned').length;
+  const salesUserId = currentSalesUser?.id || '';
+  const deliveryUserId = currentDeliveryUser?.id || '';
+  const deliveryUserUid = (currentDeliveryUser as any)?.uid || '';
+
+  const myPendingSalesOrders = (orders || []).filter(o => o && salesUserId && o.salesSellerId === salesUserId && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
+  const myPendingDeliveries = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')).length;
+  const myCompletedToday = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && o.orderStatus === 'delivered').length;
+  const myReturnedCount = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && o.orderStatus === 'returned').length;
 
   const adminNavItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -114,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'delivered_orders', label: 'Delivered Orders', icon: <CheckCircle2 className="w-4 h-4" />, badge: myCompletedToday > 0 ? myCompletedToday : undefined, badgeColor: 'bg-emerald-100 text-emerald-800' },
     { id: 'returned_orders', label: 'Returned Orders', icon: <XCircle className="w-4 h-4" />, badge: myReturnedCount > 0 ? myReturnedCount : undefined, badgeColor: 'bg-orange-100 text-orange-800' },
     { id: 'due_collection', label: 'Due Collection', icon: <Banknote className="w-4 h-4" /> },
-    { id: 'money_collected', label: 'Money Collected', icon: <Receipt className="w-4 h-4" />, badge: formatBDT(currentDeliveryUser.cashInHand), badgeColor: 'bg-emerald-100 text-emerald-800' },
+    { id: 'money_collected', label: 'Money Collected', icon: <Receipt className="w-4 h-4" />, badge: formatBDT(currentDeliveryUser?.cashInHand || 0), badgeColor: 'bg-emerald-100 text-emerald-800' },
     { id: 'collection_history', label: 'Collection History', icon: <History className="w-4 h-4" /> },
   ];
 
@@ -224,33 +228,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
                 </div>
               )}
 
-              {role === 'sales' && (
+              {role === 'sales' && currentSalesUser && (
                 <div>
-                  <div className="font-semibold text-[#102A2A]">{currentUser?.name || currentSalesUser.name}</div>
+                  <div className="font-semibold text-[#102A2A]">{currentUser?.name || currentSalesUser?.name || 'Sales Officer'}</div>
                   <div className="flex justify-between text-[11px] text-slate-600 mt-1">
                     <span>Target:</span>
-                    <span className="font-medium">{formatBDT(currentSalesUser.monthlyTarget)}</span>
+                    <span className="font-medium">{formatBDT(currentSalesUser?.monthlyTarget || 0)}</span>
                   </div>
                   <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
                     <div 
                       className="bg-[#087F7A] h-full rounded-full" 
-                      style={{ width: `${Math.min(100, (currentSalesUser.achievedSales / currentSalesUser.monthlyTarget) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (((currentSalesUser?.achievedSales || 0) / (currentSalesUser?.monthlyTarget || 1)) * 100))}%` }}
                     />
                   </div>
                   <span className="text-[10px] text-[#087F7A] font-semibold mt-1 block">
-                    {Math.round((currentSalesUser.achievedSales / currentSalesUser.monthlyTarget) * 100)}% Achieved ({formatBDT(currentSalesUser.achievedSales)})
+                    {Math.round(((currentSalesUser?.achievedSales || 0) / (currentSalesUser?.monthlyTarget || 1)) * 100)}% Achieved ({formatBDT(currentSalesUser?.achievedSales || 0)})
                   </span>
                 </div>
               )}
 
-              {role === 'delivery' && (
+              {role === 'delivery' && currentDeliveryUser && (
                 <div>
-                  <div className="font-semibold text-[#102A2A]">{currentUser?.name || currentDeliveryUser.name}</div>
-                  <p className="text-[11px] text-slate-500">{currentDeliveryUser.vehicleNumber} ({currentDeliveryUser.vehicleType})</p>
+                  <div className="font-semibold text-[#102A2A]">{currentUser?.name || currentDeliveryUser?.name || 'Delivery Courier'}</div>
+                  <p className="text-[11px] text-slate-500">{currentDeliveryUser?.vehicleNumber || 'Dhaka-Metro-D-01'} ({currentDeliveryUser?.vehicleType || 'Delivery Van'})</p>
                   <div className="mt-2 pt-1.5 border-t border-slate-200 flex justify-between items-center text-[11px]">
                     <span className="text-slate-600">Cash in Hand:</span>
                     <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                      {formatBDT(currentDeliveryUser.cashInHand)}
+                      {formatBDT(currentDeliveryUser?.cashInHand || 0)}
                     </span>
                   </div>
                 </div>
