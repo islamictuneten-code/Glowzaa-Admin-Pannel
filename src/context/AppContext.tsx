@@ -34,11 +34,7 @@ import {
 } from '../types';
 import { 
   INITIAL_COLLECTIONS, 
-  INITIAL_CUSTOMERS, 
-  INITIAL_DELIVERY_STAFF, 
-  INITIAL_ORDERS, 
   INITIAL_PURCHASES, 
-  INITIAL_SALES_STAFF,
   PRODUCT_CATEGORIES_LIST
 } from '../data/mockData';
 import {
@@ -348,12 +344,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentSalesUser, setCurrentSalesUser] = useState<SalesStaff>(() => {
     const saved = localStorage.getItem('glowzaa_sales_staff');
     const staff = saved ? JSON.parse(saved) : [];
-    return staff.length > 0 ? staff[0] : INITIAL_SALES_STAFF[0]; // fallback needed to satisfy TS type
+    return staff.length > 0 ? staff[0] : {
+      id: '',
+      name: 'Unassigned Sales',
+      email: '',
+      phone: '',
+      territory: '',
+      monthlyTarget: 0,
+      achievedSales: 0,
+      totalOrders: 0,
+      commissionRate: 0,
+      activeCustomers: 0,
+      avatar: 'ST',
+      status: 'active'
+    };
   });
   const [currentDeliveryUser, setCurrentDeliveryUser] = useState<DeliveryStaff>(() => {
     const saved = localStorage.getItem('glowzaa_delivery_staff');
     const staff = saved ? JSON.parse(saved) : [];
-    return staff.length > 0 ? staff[0] : INITIAL_DELIVERY_STAFF[0]; // fallback needed to satisfy TS type
+    return staff.length > 0 ? staff[0] : {
+      id: '',
+      name: 'Unassigned Delivery',
+      email: '',
+      phone: '',
+      vehicleNumber: '',
+      vehicleType: 'Covered Van',
+      activeDeliveriesToday: 0,
+      completedDeliveriesToday: 0,
+      cashInHand: 0,
+      avatar: 'DL',
+      status: 'on_duty'
+    };
   });
 
   // Sync role and active staff profile from authenticated user
@@ -728,14 +749,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }
 
   // Persist auxiliary state
-  useEffect(() => {
-    localStorage.setItem('glowzaa_customers', JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    localStorage.setItem('glowzaa_orders', JSON.stringify(orders));
-  }, [orders]);
-
   useEffect(() => {
     localStorage.setItem('glowzaa_purchases', JSON.stringify(purchases));
   }, [purchases]);
@@ -2061,16 +2074,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const res = await resetDemoDataInFirestore(currentUser);
     if (res.success) {
-      // Re-seed local storage with mock data
+      // Re-seed local purchase & collection state for local demo transactions without creating ghost staff
       localStorage.setItem('glowzaa_purchases', JSON.stringify(INITIAL_PURCHASES));
       localStorage.setItem('glowzaa_collections', JSON.stringify(INITIAL_COLLECTIONS));
-      localStorage.setItem('glowzaa_sales_staff', JSON.stringify(INITIAL_SALES_STAFF));
-      localStorage.setItem('glowzaa_delivery_staff', JSON.stringify(INITIAL_DELIVERY_STAFF));
+      localStorage.removeItem('glowzaa_sales_staff');
+      localStorage.removeItem('glowzaa_delivery_staff');
       
       setPurchases(INITIAL_PURCHASES);
       setCollections(INITIAL_COLLECTIONS);
-      setSalesStaff(INITIAL_SALES_STAFF);
-      setDeliveryStaff(INITIAL_DELIVERY_STAFF);
     }
     return res;
   };

@@ -5,7 +5,9 @@ import {
   signOut as secondarySignOut,
   sendPasswordResetEmail,
   updatePassword,
-  signInWithEmailAndPassword
+  signInWithEmailAndPassword,
+  setPersistence,
+  inMemoryPersistence
 } from 'firebase/auth';
 import { 
   collection, 
@@ -197,6 +199,9 @@ export async function createStaffAccount(
       const secondaryAppName = `StaffAuthCreator_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
       secondaryAuth = getAuth(secondaryApp);
+      try {
+        await setPersistence(secondaryAuth, inMemoryPersistence);
+      } catch {}
 
       try {
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, cleanPassword);

@@ -34,7 +34,7 @@ service cloud.firestore {
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'delivery');
     }
 
-    // Users Collection rules: All authenticated staff can read staff list; Admin can create/update/delete any user; Users can update own profile, but CANNOT modify role, permissions, status, loginId, staffId, or privileged RBAC fields.
+    // Users Collection rules: All authenticated staff can read staff list; Admin can create/update/delete any user; Root admin can self-provision; Non-admins can self-register ONLY with non-privileged roles and CANNOT inject privileged RBAC fields or edit roles/permissions.
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin() || (
@@ -42,19 +42,27 @@ service cloud.firestore {
         request.auth.token.email in ['admin@glowzaa.com', 'rakibseohub@gmail.com']
       ) || (
         isOwner(userId) && 
-        !(request.resource.data.role in ['admin', 'sales', 'delivery', 'manager', 'supervisor']) &&
-        (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin != true) &&
-        (!('salesStaffId' in request.resource.data) || request.resource.data.salesStaffId == null) &&
-        (!('deliveryStaffId' in request.resource.data) || request.resource.data.deliveryStaffId == null) &&
-        (!('monthlyTarget' in request.resource.data) || request.resource.data.monthlyTarget == null) &&
-        (!('commissionRate' in request.resource.data) || request.resource.data.commissionRate == null)
+        !(request.resource.data.role in ['admin', 'sales', 'delivery', 'manager', 'supervisor', 'staff', 'cashier', 'operator', 'executive', 'superuser', 'driver', 'warehouse']) &&
+        (!('role' in request.resource.data) || request.resource.data.role in ['customer', 'guest', 'viewer', 'user']) &&
+        (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false) &&
+        (!('permissions' in request.resource.data) || request.resource.data.permissions.size() == 0) &&
+        !request.resource.data.keys().hasAny([
+          'staffId', 'salesStaffId', 'deliveryStaffId', 'monthlyTarget', 
+          'commissionRate', 'department', 'territory', 'assignedArea', 
+          'assignedZones', 'vehicleNumber', 'vehicleType', 'createdBy', 
+          'createdByName', 'salary', 'creditLimit', 'advanceBalance', 
+          'totalPurchase', 'totalPaid', 'currentDue'
+        ])
       );
       allow update: if isAdmin() || (
         isOwner(userId) && 
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'permissions', 'isAdmin', 'status', 'loginId', 
           'staffId', 'salesStaffId', 'deliveryStaffId', 'monthlyTarget', 
-          'commissionRate', 'department', 'createdBy', 'createdByName'
+          'commissionRate', 'department', 'territory', 'assignedArea', 
+          'assignedZones', 'vehicleNumber', 'vehicleType', 'createdBy', 
+          'createdByName', 'salary', 'creditLimit', 'advanceBalance', 
+          'totalPurchase', 'totalPaid', 'currentDue'
         ])
       );
       allow delete: if isAdmin();
@@ -128,14 +136,60 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Payments Collection rules: All authenticated staff can read; Admin, Sales, and Delivery can record payments; Only Admin can reverse/update arbitrary records or delete
+    // Payments Collection rules: All authenticated staff can read; Admin, Sales, and Delivery can record legitimate payments; Strict field-injection & manipulation protection; Only courier can initiate handover status on own un-reconciled receipts; Reversals & modifications strictly restricted to Admin.
     match /payments/{paymentId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (isAdmin() || isSales() || isDelivery() || (request.resource.data.collectedByUserId == request.auth.uid || request.resource.data.recordedByUserId == request.auth.uid));
-      allow update: if isAdmin() || (
-        isAuthenticated() && 
-        (resource.data.collectedByUserId == request.auth.uid || resource.data.recordedByUserId == request.auth.uid) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['amount', 'customerId', 'collectedByUserId', 'recordedByUserId'])
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        (
+          isSales() &&
+          request.resource.data.collectedByUserId == request.auth.uid &&
+          (!('createdBy' in request.resource.data) || request.resource.data.createdBy == request.auth.uid) &&
+          request.resource.data.amount is number &&
+          request.resource.data.amount > 0 &&
+          request.resource.data.customerId is string &&
+          request.resource.data.customerId.size() > 0 &&
+          request.resource.data.reconciledWithAdmin == false &&
+          request.resource.data.isReversed == false &&
+          (!('handoverStatus' in request.resource.data) || request.resource.data.handoverStatus in ['none', null]) &&
+          (!('handoverId' in request.resource.data) || request.resource.data.handoverId == null)
+        ) ||
+        (
+          isDelivery() &&
+          request.resource.data.collectedByUserId == request.auth.uid &&
+          (!('createdBy' in request.resource.data) || request.resource.data.createdBy == request.auth.uid) &&
+          request.resource.data.amount is number &&
+          request.resource.data.amount > 0 &&
+          request.resource.data.customerId is string &&
+          request.resource.data.customerId.size() > 0 &&
+          request.resource.data.reconciledWithAdmin == false &&
+          request.resource.data.isReversed == false &&
+          (!('handoverStatus' in request.resource.data) || request.resource.data.handoverStatus in ['none', null]) &&
+          (!('handoverId' in request.resource.data) || request.resource.data.handoverId == null)
+        ) ||
+        (
+          request.resource.data.collectedByUserId == request.auth.uid &&
+          (!('createdBy' in request.resource.data) || request.resource.data.createdBy == request.auth.uid) &&
+          request.resource.data.amount is number &&
+          request.resource.data.amount > 0 &&
+          request.resource.data.customerId is string &&
+          request.resource.data.customerId.size() > 0 &&
+          request.resource.data.reconciledWithAdmin == false &&
+          request.resource.data.isReversed == false &&
+          (!('handoverStatus' in request.resource.data) || request.resource.data.handoverStatus in ['none', null]) &&
+          (!('handoverId' in request.resource.data) || request.resource.data.handoverId == null)
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (
+          (resource.data.collectedByUserId == request.auth.uid || resource.data.driverId == request.auth.uid) &&
+          resource.data.reconciledWithAdmin != true &&
+          resource.data.isReversed != true &&
+          resource.data.handoverStatus in ['none', 'rejected', null] &&
+          request.resource.data.handoverStatus == 'pending' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['handoverStatus', 'handoverId', 'updatedAt'])
+        )
       );
       allow delete: if isAdmin();
     }
@@ -156,11 +210,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Cash Handovers Collection rules: All authenticated staff can read; authenticated staff can create handover requests; Admin can update (accept/reject); Permanent deletion disallowed
+    // Cash Handovers Collection rules: All authenticated staff can read; delivery couriers can create handover requests; Admin/HQ Cashier can review/accept/reject
     match /cash_handovers/{handoverId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAdmin() || isAuthenticated();
+      allow create: if isAuthenticated() && (isAdmin() || isDelivery() || request.resource.data.driverId == request.auth.uid);
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 

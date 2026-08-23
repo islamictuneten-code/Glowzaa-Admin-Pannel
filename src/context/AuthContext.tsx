@@ -8,7 +8,8 @@ import {
   User as FirebaseUser,
   setPersistence,
   browserLocalPersistence,
-  browserSessionPersistence
+  browserSessionPersistence,
+  inMemoryPersistence
 } from 'firebase/auth';
 import { 
   doc, 
@@ -110,15 +111,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userSnapshot = await getDoc(userDocRef);
 
       if (!userSnapshot.exists()) {
-        // Auto-provision admin profile for designated admin accounts or first user
+        // Auto-provision admin profile ONLY for designated root admin accounts
         const isAdminAccount = user.email?.toLowerCase() === 'admin@glowzaa.com' || 
                                user.email?.toLowerCase() === 'rakibseohub@gmail.com';
         
+        if (!isAdminAccount) {
+          console.warn(`No Firestore staff profile document found for UID: ${user.uid} (${user.email}). Denying unprovisioned access.`);
+          return null;
+        }
+        
         const nowIso = new Date().toISOString();
-        const roleToAssign: UserRole = isAdminAccount ? 'admin' : 'sales';
-        const nameToAssign = user.displayName || (isAdminAccount ? 'Glowzaa Admin' : 'Staff Member');
+        const roleToAssign: UserRole = 'admin';
+        const nameToAssign = user.displayName || 'Glowzaa Admin';
         const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'GA';
-        const defaultLoginId = user.email ? user.email.split('@')[0].toLowerCase() : (isAdminAccount ? 'admin' : `user_${user.uid.slice(0, 5)}`);
+        const defaultLoginId = user.email ? user.email.split('@')[0].toLowerCase() : 'admin';
 
         const autoProfile: AuthUser = {
           uid: user.uid,
@@ -131,9 +137,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status: 'active',
           createdAt: nowIso,
           avatar: initials,
-          title: roleToAssign === 'admin' ? 'System Administrator' : 'Sales Executive',
-          department: roleToAssign === 'admin' ? 'Operations & Executive HQ' : 'Field Sales & Accounts',
-          staffId: roleToAssign === 'admin' ? 'ADM-001' : 'STF-001'
+          title: 'System Administrator',
+          department: 'Operations & Executive HQ',
+          staffId: 'ADM-001'
         };
 
         // Write to Firestore document users/{uid}
@@ -200,14 +206,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const isAdminAccount = user.email?.toLowerCase() === 'admin@glowzaa.com' || 
                              user.email?.toLowerCase() === 'rakibseohub@gmail.com';
-      const roleToAssign: UserRole = isAdminAccount ? 'admin' : 'sales';
-      const nameToAssign = user.displayName || (isAdminAccount ? 'Glowzaa Admin' : 'Staff Member');
+      if (!isAdminAccount) {
+        return null;
+      }
+      const roleToAssign: UserRole = 'admin';
+      const nameToAssign = user.displayName || 'Glowzaa Admin';
       const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'GA';
 
       const fallbackProfile: AuthUser = {
         uid: user.uid,
         id: user.uid,
-        loginId: user.email ? user.email.split('@')[0] : 'staff',
+        loginId: user.email ? user.email.split('@')[0] : 'admin',
         name: nameToAssign,
         email: user.email || '',
         phone: '',
@@ -215,9 +224,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'active',
         createdAt: new Date().toISOString(),
         avatar: initials,
-        title: roleToAssign === 'admin' ? 'System Administrator' : 'Sales Executive',
-        department: roleToAssign === 'admin' ? 'Operations & Executive HQ' : 'Field Sales & Accounts',
-        staffId: roleToAssign === 'admin' ? 'ADM-001' : 'STF-001'
+        title: 'System Administrator',
+        department: 'Operations & Executive HQ',
+        staffId: 'ADM-001'
       };
 
       return fallbackProfile;
@@ -420,9 +429,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Set persistence based on "Remember Me"
-      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
-      await setPersistence(auth, persistence);
+      // Set persistence based on "Remember Me" with resilient fallback against closing/restricted IndexedDB
+      try {
+        const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+        await setPersistence(auth, persistence);
+      } catch (persistErr) {
+        console.warn('Auth persistence fallback to in-memory:', persistErr);
+        try {
+          await setPersistence(auth, inMemoryPersistence);
+        } catch {
+          // Continue even if setPersistence fails in restricted iframe/browser environments
+        }
+      }
 
       // Authenticate with Firebase Authentication
       const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);

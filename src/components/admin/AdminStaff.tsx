@@ -14,6 +14,7 @@ import {
 } from '../../services/staffAuthService';
 import { uploadStaffProfilePhoto, validateImageFile } from '../../services/storageService';
 import { UserAvatar } from '../shared/UserAvatar';
+import { P03_FULL_AUDIT_REPORT_TEXT } from './SystemAuditReport';
 import { 
   Users, 
   UserCheck, 
@@ -72,154 +73,40 @@ export const AdminStaff: React.FC = () => {
   const [isLoadingAudit, setIsLoadingAudit] = useState<boolean>(false);
   const [isAuditCopied, setIsAuditCopied] = useState<boolean>(false);
 
-  const fullAuditReportText = `GLOWZAA B2B WHOLESALE COMMERCE
-FULL PRODUCTION READINESS, DATA INTEGRITY, MEDIA, PRINT & RESPONSIVE UI AUDIT REPORT
-
-OVERALL STATUS:
-NOT READY
-
-P0 CRITICAL:
-2 issues
-
-P1 HIGH:
-4 issues
-
-P2 MEDIUM:
-3 issues
-
-P3 LOW:
-2 issues
-
----
-
-CRITICAL FINDINGS
-
-Issue 1: Authentication UID & Secondary App Creation Boundary in Staff Account Provisioning
-Severity: P0 — CRITICAL
-Exact File: /src/services/staffAuthService.ts
-Exact Function/Component: createStaffAccount()
-Root Cause: Creating secondary Firebase Auth instances in client-side runtime can trigger quota limits, domain restrictions, or cross-instance token conflicts if not properly handled, leading to account creation stalls.
-Current Behavior: Secondary Auth app initialization can sometimes fail or hang when creating remote Firebase Auth records, requiring fallback logic.
-Expected Behavior: Admin creates Seller or Delivery staff, provisioning both Firebase Auth credentials and Firestore staff profiles seamlessly with guaranteed UID mapping.
-Recommended Fix: Standardize Admin SDK token generation or ensure robust error handling and fallback mechanism with clear status feedback.
-
-Issue 2: Profile Photo Storage Upload & URL Persistence
-Severity: P0 — CRITICAL
-Exact File: /src/services/staffAuthService.ts and /src/components/admin/AdminStaff.tsx
-Exact Function/Component: uploadStaffProfilePhoto() / handleCreateSubmit() / handleEditSubmit()
-Root Cause: Profile photo uploads rely on client-side compression and storage helper functions which can fail if Firebase Storage rules or bucket configuration are uninitialized or misconfigured.
-Current Behavior: Staff profile photos may fail to upload or persist across page refreshes if storage blob URLs are not correctly bound to user documents.
-Expected Behavior: Uploaded photos successfully compress, upload to Firebase Storage, store valid download URLs in Firestore profiles, and persist across refreshes.
-Recommended Fix: Enforce robust storage rule validation and ensure fallback handling when storage uploads fail.
-
-Issue 3: Invoice & Printable Document Layouts on Mobile Viewports
-Severity: P1 — HIGH
-Exact File: /src/components/admin/AdminOrders.tsx
-Exact Function/Component: Print and download handlers (window.print)
-Root Cause: Standard browser window.print() triggers full-page printing without scoped print container isolation (@media print), causing mobile clipping, overlapping headers, and layout breakage.
-Current Behavior: Printing or downloading invoices on mobile devices results in clipped tables and unformatted pages.
-Expected Behavior: Print preview and PDF downloads render clean A4 formats with proper CSS isolation (@media print).
-Recommended Fix: Implement dedicated printable container wrappers with clean @media print CSS rules hiding navigation and dashboard chrome.
-
-Issue 4: Responsive Table Overflow in Dense Financial Views
-Severity: P1 — HIGH
-Exact File: /src/components/admin/AdminCustomers.tsx, /src/components/admin/AdminExpenses.tsx, /src/components/admin/AdminReports.tsx
-Exact Function/Component: Data tables across admin modules
-Root Cause: Tables with 6+ columns lack responsive card stacking or horizontal scroll containers on narrow viewports (< 390px).
-Current Behavior: Tables push outside screen bounds, causing horizontal scrolling and clipped action buttons.
-Expected Behavior: Tables gracefully adapt using responsive horizontal scroll containers or stacked mobile card layouts.
-Recommended Fix: Wrap data tables in overflow-x-auto containers and implement mobile card views for complex rows.
-
-Issue 5: Mobile Bottom Navigation Overlap
-Severity: P1 — HIGH
-Exact File: /src/components/navigation/MobileBottomNav.tsx
-Exact Function/Component: MobileBottomNav rendering
-Root Cause: Fixed positioning with insufficient bottom padding (pb-20 / pb-24) on main view containers causes bottom navigation bars to overlap content and action buttons.
-Current Behavior: Last items in lists or forms are obscured by the mobile bottom navigation bar.
-Expected Behavior: Main container views include bottom padding matching navbar height to ensure all content is fully scrollable and visible.
-Recommended Fix: Add dynamic bottom spacing (pb-24 or safe-area-inset-bottom) to all primary screen scroll wrappers.
-
-Issue 6: Mock Data Fallback Isolation in Offline / Empty States
-Severity: P1 — HIGH
-Exact File: /src/context/AppContext.tsx and /src/services/firestoreService.ts
-Exact Function/Component: Data initialization hooks
-Root Cause: Initial seed logic or local fallback arrays can re-populate empty collections if real-time listeners detect zero documents on initial cold start.
-Current Behavior: Wiping collections can sometimes trigger automatic re-seeding if fallback flags are active.
-Expected Behavior: Empty collections remain empty when explicitly wiped by administrators unless manual demo seeding is requested.
-Recommended Fix: Decouple automatic initial seeding from production data sync checks.
-
----
-
-DATA RESET
-- Wipe All Data: Available via administrative maintenance tools, but requires strict verification of collection dependencies.
-- Reset Demo Data: Supported via admin settings / initialization scripts.
-- Automatic Data Recreation: Possible on cold start if fallback seed arrays are triggered when Firestore collections return 0 records.
-- Mock Data Fallback: Present in legacy utility modules; production components must rely exclusively on Firestore queries and AppContext state.
-- Firestore Persistence: Enabled via Firebase SDK configuration (initializeFirestore).
-
-STAFF PROFILE PHOTO
-- Seller Photo Upload: Requires verified Firebase Storage bucket and permissions.
-- Delivery Photo Upload: Requires verified Firebase Storage bucket and permissions.
-- Google Drive Upload: NOT IMPLEMENTED (Application uses Firebase Storage / local Base64 fallback).
-- Firestore Persistence: Implemented via photoURL field in user profile documents.
-- Refresh Persistence: Verified when storage upload succeeds and photoURL is correctly saved to Firestore.
-- Login Persistence: Maintained via Firestore user profile sync upon authentication state change.
-
-PRINT / PDF
-- Invoice Print: P2 — Requires explicit @media print stylesheet isolation to prevent full-page dashboard rendering.
-- Invoice PDF: P2 — Client-side HTML-to-PDF generation requires robust canvas scaling and font embedding for Bengali characters.
-- Payment Receipt: P2 — Printable layout needs dedicated receipt templates.
-- Purchase Invoice: P2 — Printable layout needs dedicated purchase templates.
-- Reports: P3 — Summary reports require landscape print orientation rules.
-- Mobile Print: P1 — Dependent on mobile browser print dialog support and CSS page size rules.
-- Desktop Print: P2 — Functions correctly when print styles are explicitly defined.
-
-RESPONSIVE UI
-Screens requiring mobile layout hardening:
-1. Admin Dashboard / Analytics Cards: Grid columns need stacking on sm screens.
-2. Customers Ledger View: Tables and transaction lists overflow on 360px viewports.
-3. Staff Management Modal: Form inputs and role selectors require optimized padding on mobile.
-4. Expenses & P&L Tables: Dense financial numbers require horizontal scroll wrappers.
-5. Order Creation & Item Selection: Product catalog cards need compact mobile grid layouts.
-
-SECURITY
-- RBAC Enforcement: Client-side route guarding is present, but comprehensive server-side Firestore Security Rules (firestore.rules) must strictly validate user roles (admin, sales, delivery) for all write and read operations.
-- Auth Token Validation: Ensure sensitive API endpoints or actions verify claims securely.
-
-PERFORMANCE
-- Real-Time Listeners: Ensure onSnapshot subscriptions in AppContext and service modules are properly cleaned up (useEffect return unsubscribers) to prevent memory leaks.
-- Bundle Size: Code splitting and lazy loading of heavy admin modules will improve initial load performance on mobile devices.
-
-FINAL RECOMMENDATION
-1. Which issues must be fixed first:
-   - Resolve staff account creation (createStaffAccount and secondary app lifecycle).
-   - Implement strict @media print styles and mobile table overflow fixes.
-   - Fix mobile bottom navigation content overlap (pb-24 padding).
-2. Which issues can wait:
-   - Advanced PDF formatting enhancements and desktop print refinements (P2/P3).
-3. Whether the application is safe for real business use:
-   - NOT YET. While core B2B workflows (orders, customers, inventory, RBAC) are structurally built, the critical staff creation bottlenecks and mobile responsive clipping must be resolved before live production deployment.
-4. Whether another implementation step should begin only AFTER these bugs are fixed:
-   - Yes. Proceed with targeted bug fixes for staff creation and mobile responsiveness before starting any new feature development.`;
+  const fullAuditReportText = P03_FULL_AUDIT_REPORT_TEXT;
 
   const handleCopyAuditReport = async () => {
     try {
-      await navigator.clipboard.writeText(fullAuditReportText);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(fullAuditReportText);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = fullAuditReportText;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        textArea.setAttribute("readonly", "");
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setIsAuditCopied(true);
       addToast({
         type: 'success',
-        title: 'Audit Report Copied',
-        message: 'Audit report copied to clipboard.'
+        title: '✓ সম্পূর্ণ অডিট রিপোর্ট কপি হয়েছে',
+        message: 'সম্পূর্ণ সিস্টেম ও ভেরিফিকেশন অডিট রিপোর্ট সফলভাবে ক্লিপবোর্ডে কপি করা হয়েছে।'
       });
       setTimeout(() => {
         setIsAuditCopied(false);
-      }, 2000);
+      }, 2200);
     } catch (err) {
       console.error('Failed to copy audit report:', err);
       addToast({
         type: 'error',
-        title: 'Copy Failed',
-        message: 'Unable to copy audit report. Please try again.'
+        title: 'কপি ব্যর্থ হয়েছে',
+        message: 'অডিট রিপোর্ট কপি করা সম্ভব হয়নি।'
       });
     }
   };

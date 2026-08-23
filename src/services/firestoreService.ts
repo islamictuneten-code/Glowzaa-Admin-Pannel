@@ -44,8 +44,6 @@ import {
   CompanySettings
 } from '../types';
 
-import { INITIAL_PRODUCTS } from '../data/mockData';
-
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -1880,13 +1878,13 @@ export async function confirmOrderInFirestore(
       }
 
       // 1. Fetch and validate stock for all products (UPFRONT READS ONLY - NO WRITES HERE)
-      const productDocs: { ref: any; data: Product; item: OrderItem; isNew?: boolean }[] = [];
+      const productDocs: { ref: any; data: Product; item: OrderItem }[] = [];
 
       for (const item of orderData.items) {
         let prodRef = doc(db, 'products', item.productId);
         let prodSnap = await transaction.get(prodRef);
 
-        // Fallback 1: Check if product document exists using item.sku as document ID
+        // Fallback: Check if product document exists using item.sku as document ID
         if (!prodSnap.exists() && item.sku && item.sku !== item.productId) {
           const skuRef = doc(db, 'products', item.sku);
           const skuSnap = await transaction.get(skuRef);
@@ -1896,40 +1894,13 @@ export async function confirmOrderInFirestore(
           }
         }
 
-        let prodData: Product;
-        let isNew = false;
-
         if (!prodSnap.exists()) {
-          // Fallback 2: Match from INITIAL_PRODUCTS or prepare auto-heal product object
-          const matchedInitial = INITIAL_PRODUCTS.find(
-            p => p.id === item.productId || p.sku === item.sku || p.name.toLowerCase() === item.productName.toLowerCase()
+          throw new Error(
+            `Product not found: "${item.productName || item.productId}". The requested product does not exist in the catalog or has been deleted.`
           );
-
-          prodData = {
-            id: item.productId || item.sku || `prod-${Date.now()}`,
-            name: item.productName || 'Wholesale Product',
-            sku: item.sku || 'SKU-GENERIC',
-            category: item.category || 'General',
-            subCategory: 'Wholesale Items',
-            image: matchedInitial?.image || 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=500&auto=format&fit=crop&q=60',
-            purchasePrice: item.purchasePrice || Math.round((item.unitPrice || 100) * 0.7),
-            wholesalePrice: item.unitPrice || 100,
-            mrp: item.mrp || Math.round((item.unitPrice || 100) * 1.5),
-            currentStock: 120,
-            lowStockThreshold: 15,
-            unit: item.unit || 'Piece',
-            warehouseLocation: 'Bay A-01',
-            status: 'active',
-            stockStatus: 'in_stock',
-            brandName: 'Glowzaa',
-            description: item.productName || 'Wholesale Catalog Item'
-          };
-          isNew = true;
-          // Note: Do NOT call transaction.set here to keep all reads before writes!
-        } else {
-          prodData = prodSnap.data() as Product;
         }
 
+        const prodData = prodSnap.data() as Product;
         const currentStock = Number(prodData.currentStock) || 0;
 
         if (currentStock < item.quantity) {
@@ -1938,7 +1909,7 @@ export async function confirmOrderInFirestore(
           );
         }
 
-        productDocs.push({ ref: prodRef, data: prodData, item, isNew });
+        productDocs.push({ ref: prodRef, data: prodData, item });
       }
 
       // 2. Fetch customer upfront (UPFRONT READS ONLY)
@@ -1952,14 +1923,7 @@ export async function confirmOrderInFirestore(
       const now = new Date().toISOString();
 
       // 3. NOW ALL READS ARE COMPLETE - START WRITES
-      // 3a. Auto-seed missing product docs into Firestore if needed
-      for (const { ref: prodRef, data: prodData, isNew } of productDocs) {
-        if (isNew) {
-          transaction.set(prodRef, prodData);
-        }
-      }
-
-      // 3b. Perform atomic stock deductions & create inventory transactions (WRITES)
+      // 3a. Perform atomic stock deductions & create inventory transactions (WRITES)
       for (const { ref: prodRef, data: prodData, item } of productDocs) {
         const prevStock = Number(prodData.currentStock) || 0;
         const newStock = Math.max(0, prevStock - item.quantity);

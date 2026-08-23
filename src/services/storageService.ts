@@ -140,22 +140,42 @@ export async function uploadStaffProfilePhoto(
       return { success: false, error: validation.error };
     }
 
-    const { blob, mimeType } = await compressAndResizeImage(file);
+    const { blob, mimeType, extension } = await compressAndResizeImage(file);
     
-    // Convert blob directly to Base64 Data URL to bypass Firebase Storage
-    // This fits well within Firestore's 1MB document limit since it's highly compressed
-    const base64Url = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Failed to convert image to base64'));
-      reader.readAsDataURL(blob);
-    });
+    // Primary: Upload to Firebase Storage and get canonical HTTPS download URL
+    try {
+      const timestamp = Date.now();
+      const storageRef = ref(storage, `staff_avatars/${userId}_${timestamp}.${extension}`);
+      const uploadResult = await uploadBytes(storageRef, blob, {
+        contentType: mimeType,
+        customMetadata: {
+          uploadedBy: performedByUserId,
+          userId: userId,
+          uploadedAt: new Date().toISOString()
+        }
+      });
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+      return {
+        success: true,
+        downloadUrl: downloadURL,
+        downloadURL: downloadURL
+      };
+    } catch (storageErr: any) {
+      console.warn('Firebase Storage upload notice, falling back if offline:', storageErr);
+      // Fallback only if Firebase Storage upload fails (e.g. offline preview)
+      const base64Url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to convert image to base64'));
+        reader.readAsDataURL(blob);
+      });
 
-    return {
-      success: true,
-      downloadUrl: base64Url,
-      downloadURL: base64Url
-    };
+      return {
+        success: true,
+        downloadUrl: base64Url,
+        downloadURL: base64Url
+      };
+    }
   } catch (error: any) {
     console.error('Image processing error:', error);
     return {
