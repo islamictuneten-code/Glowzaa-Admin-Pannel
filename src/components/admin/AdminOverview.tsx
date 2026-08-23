@@ -39,12 +39,13 @@ export const AdminOverview: React.FC = () => {
 
   // Cards calculation
   const totalSales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const todaysOrders = orders.filter(o => o.createdDate.includes('2026-08-18') || o.createdDate.includes('Today'));
+  const todayLocal = new Date().toISOString().split('T')[0];
+  const todaysOrders = orders.filter(o => o.createdDate.includes(todayLocal) || o.createdDate.includes('Today'));
   const todaysSales = todaysOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   
   const pendingOrders = orders.filter(o => o.orderStatus === 'pending' || o.orderStatus === 'processing');
   const totalDue = customers.reduce((sum, c) => sum + c.currentDue, 0);
-  const todaysCollection = collections.filter(c => c.collectedAt.includes('2026-08-18') || c.collectedAt.includes('Today')).reduce((sum, c) => sum + c.amount, 0);
+  const todaysCollection = collections.filter(c => c.collectedAt.includes(todayLocal) || c.collectedAt.includes('Today')).reduce((sum, c) => sum + c.amount, 0);
   
   const lowStockProducts = products.filter(p => p.status === 'low_stock' || p.status === 'out_of_stock');
   const topCustomers = [...customers].sort((a, b) => b.totalPurchase - a.totalPurchase).slice(0, 5);
@@ -85,7 +86,7 @@ export const AdminOverview: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3.5">
         <StatCard
           title="Today's Sales"
-          value={formatBDT(todaysSales || 83500)}
+          value={formatBDT(todaysSales)}
           subtitle={`${todaysOrders.length} wholesale orders booked`}
           icon={<TrendingUp className="w-4 h-4 text-[#0F766E]" />}
           accentColor="teal"
@@ -131,7 +132,7 @@ export const AdminOverview: React.FC = () => {
 
         <StatCard
           title="Today's Collection"
-          value={formatBDT(todaysCollection || 83500)}
+          value={formatBDT(todaysCollection)}
           subtitle="Cash & digital receipts"
           icon={<Receipt className="w-4 h-4 text-[#10B981]" />}
           accentColor="emerald"

@@ -320,19 +320,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [purchases, setPurchases] = useState<PurchaseBill[]>(() => {
     const saved = localStorage.getItem('glowzaa_purchases');
-    return saved ? JSON.parse(saved) : INITIAL_PURCHASES;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  const [salesStaff, setSalesStaff] = useState<SalesStaff[]>(INITIAL_SALES_STAFF);
-  const [deliveryStaff, setDeliveryStaff] = useState<DeliveryStaff[]>(INITIAL_DELIVERY_STAFF);
+  const [salesStaff, setSalesStaff] = useState<SalesStaff[]>(() => {
+    const saved = localStorage.getItem('glowzaa_sales_staff');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [deliveryStaff, setDeliveryStaff] = useState<DeliveryStaff[]>(() => {
+    const saved = localStorage.getItem('glowzaa_delivery_staff');
+    return saved ? JSON.parse(saved) : [];
+  });
   
   const [collections, setCollections] = useState<CollectionRecord[]>(() => {
     const saved = localStorage.getItem('glowzaa_collections');
-    return saved ? JSON.parse(saved) : INITIAL_COLLECTIONS;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  const [currentSalesUser, setCurrentSalesUser] = useState<SalesStaff>(INITIAL_SALES_STAFF[0]);
-  const [currentDeliveryUser, setCurrentDeliveryUser] = useState<DeliveryStaff>(INITIAL_DELIVERY_STAFF[0]);
+  const [currentSalesUser, setCurrentSalesUser] = useState<SalesStaff>(() => {
+    const saved = localStorage.getItem('glowzaa_sales_staff');
+    const staff = saved ? JSON.parse(saved) : [];
+    return staff.length > 0 ? staff[0] : INITIAL_SALES_STAFF[0]; // fallback needed to satisfy TS type
+  });
+  const [currentDeliveryUser, setCurrentDeliveryUser] = useState<DeliveryStaff>(() => {
+    const saved = localStorage.getItem('glowzaa_delivery_staff');
+    const staff = saved ? JSON.parse(saved) : [];
+    return staff.length > 0 ? staff[0] : INITIAL_DELIVERY_STAFF[0]; // fallback needed to satisfy TS type
+  });
 
   // Sync role and active staff profile from authenticated user
   useEffect(() => {
@@ -1938,14 +1952,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser || currentUser.role !== 'admin') {
       return { success: false, error: 'Unauthorized: Only administrators can execute complete data wipe.' };
     }
-    return await wipeAllApplicationDataInFirestore(currentUser);
+    const res = await wipeAllApplicationDataInFirestore(currentUser);
+    if (res.success) {
+      // Clear localStorage
+      localStorage.removeItem('glowzaa_purchases');
+      localStorage.removeItem('glowzaa_collections');
+      localStorage.removeItem('glowzaa_sales_staff');
+      localStorage.removeItem('glowzaa_delivery_staff');
+      localStorage.removeItem('glowzaa_customers');
+      localStorage.removeItem('glowzaa_orders');
+      
+      // Clear React states
+      setPurchases([]);
+      setCollections([]);
+      setSalesStaff([]);
+      setDeliveryStaff([]);
+    }
+    return res;
   };
 
   const resetDemoData = async (): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser || currentUser.role !== 'admin') {
       return { success: false, error: 'Unauthorized: Only administrators can reset demo data.' };
     }
-    return await resetDemoDataInFirestore(currentUser);
+    const res = await resetDemoDataInFirestore(currentUser);
+    if (res.success) {
+      // Re-seed local storage with mock data
+      localStorage.setItem('glowzaa_purchases', JSON.stringify(INITIAL_PURCHASES));
+      localStorage.setItem('glowzaa_collections', JSON.stringify(INITIAL_COLLECTIONS));
+      localStorage.setItem('glowzaa_sales_staff', JSON.stringify(INITIAL_SALES_STAFF));
+      localStorage.setItem('glowzaa_delivery_staff', JSON.stringify(INITIAL_DELIVERY_STAFF));
+      
+      setPurchases(INITIAL_PURCHASES);
+      setCollections(INITIAL_COLLECTIONS);
+      setSalesStaff(INITIAL_SALES_STAFF);
+      setDeliveryStaff(INITIAL_DELIVERY_STAFF);
+    }
+    return res;
   };
 
   return (

@@ -38,11 +38,7 @@ async function testConnection() {
   try {
     await getDocFromServer(doc(db, '_health', 'connection'));
   } catch (error: any) {
-    // Suppress benign connection closing/hidden/offline warnings in console
-    const msg = error?.message || '';
-    if (!msg.includes('Database is closing') && !msg.includes('offline')) {
-      console.warn("Firestore status notice:", msg);
-    }
+    // Silently ignore benign connection status notices (Database is closing/hidden, offline, not-found, etc.)
   }
 }
 testConnection();
