@@ -421,6 +421,31 @@ export async function resetStaffPasswordDirectly(
     const targetRole = isUserObj ? staffUserOrEmail.role : 'staff';
     const loginId = isUserObj ? (staffUserOrEmail.loginId || staffUserOrEmail.email) : (targetLoginId || email);
 
+    // Update Firestore user document with pendingPassword so login auto-syncs auth credentials
+    if (isUserObj && staffUserOrEmail.uid) {
+      try {
+        await updateDoc(doc(db, 'users', staffUserOrEmail.uid), {
+          pendingPassword: newPassword,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Failed to save pendingPassword in Firestore:', err);
+      }
+    } else {
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', email));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          await updateDoc(snap.docs[0].ref, {
+            pendingPassword: newPassword,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to save pendingPassword by email:', err);
+      }
+    }
+
     // Write audit log indicating password reset safely
     writeAuditLogSafely({
       action: 'STAFF_PASSWORD_RESET',

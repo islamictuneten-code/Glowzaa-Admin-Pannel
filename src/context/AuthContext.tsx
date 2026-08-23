@@ -410,9 +410,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setIsLoading(true);
 
+    let authEmail = cleanInput.toLowerCase();
+
     try {
       // 1. Resolve Login ID to Authentication Email
-      let authEmail = cleanInput.toLowerCase();
       if (!cleanInput.includes('@')) {
         // Look up by loginId in Firestore users collection
         try {
@@ -491,6 +492,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return { success: true };
     } catch (err: any) {
+      // AUTO-HEALING: If sign-in failed, check if staff profile exists in Firestore and auto-provision Auth user if missing
+      try {
+        let profileMatch: any = null;
+        let matchedUid = '';
+        
+        const qEmail = query(collection(db, 'users'), where('email', '==', authEmail));
+        const snapEmail = await getDocs(qEmail);
+        if (!snapEmail.empty) {
+          profileMatch = snapEmail.docs[0].data();
+          matchedUid = snapEmail.docs[0].id;
+        } else if (!cleanInput.includes('@')) {
+          const qLogin = query(collection(db, 'users'), where('loginId', '==', cleanInput.toLowerCase()));
+          const snapLogin = await getDocs(qLogin);
+          if (!snapLogin.empty) {
+            profileMatch = snapLogin.docs[0].data();
+            matchedUid = snapLogin.docs[0].id;
+          }
+        }
+
+        if (profileMatch && profileMatch.status !== 'inactive') {
+          try {
+            const newCred = await createUserWithEmailAndPassword(auth, authEmail, password);
+            if (profileMatch.pendingPassword) {
+              await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
+            }
+            setFirebaseUser(newCred.user);
+            setCurrentUser(profileMatch);
+            setIsLoading(false);
+            return { success: true };
+          } catch (createAuthErr: any) {
+            // If user already exists in auth (e.g. wrong password), proceed to standard error handling
+          }
+        }
+      } catch (healingErr) {
+        console.warn('Auto-healing notice:', healingErr);
+      }
+
       setIsLoading(false);
       let errorMessage = 'Invalid Login ID or password. Please verify your credentials.';
 
