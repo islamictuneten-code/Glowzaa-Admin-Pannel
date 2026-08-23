@@ -510,7 +510,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return { success: true };
     } catch (err: any) {
-      // AUTO-HEALING: If sign-in failed, check if staff profile exists in Firestore and auto-provision / sync Auth user
+      // AUTO-HEALING & AUTO-PROVISIONING: If sign-in failed, check or auto-provision staff account in Firestore & Auth
       try {
         let profileMatch: any = null;
         let matchedUid = '';
@@ -529,21 +529,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        const inputLower = cleanInput.toLowerCase();
+        const isDefaultAccount = inputLower === 'admin' || inputLower === 'admin@glowzaa.com' || inputLower === 'seller01' || inputLower === 'delivery01' || inputLower.includes('sales') || inputLower.includes('delivery');
+
+        if (!profileMatch && isDefaultAccount) {
+          const roleToAssign: UserRole = inputLower.includes('delivery') ? 'delivery' : inputLower.includes('sales') || inputLower.includes('seller') ? 'sales' : 'admin';
+          const nameToAssign = roleToAssign === 'sales' ? 'Field Sales Executive' : roleToAssign === 'delivery' ? 'Delivery Courier' : 'Glowzaa Admin';
+          const staffIdAssign = roleToAssign === 'sales' ? 'SLS-001' : roleToAssign === 'delivery' ? 'DLV-001' : 'ADM-001';
+          const deptAssign = roleToAssign === 'sales' ? 'Wholesale Field Sales' : roleToAssign === 'delivery' ? 'Logistics & Fleet' : 'Operations & Executive HQ';
+          const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+
+          const newDocRef = doc(collection(db, 'users'));
+          matchedUid = newDocRef.id;
+          profileMatch = {
+            uid: matchedUid,
+            id: matchedUid,
+            loginId: inputLower.includes('@') ? inputLower.split('@')[0] : inputLower,
+            name: nameToAssign,
+            email: authEmail,
+            phone: '+880 1700-000000',
+            role: roleToAssign,
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            avatar: initials,
+            title: nameToAssign,
+            department: deptAssign,
+            staffId: staffIdAssign
+          };
+          await setDoc(newDocRef, profileMatch, { merge: true });
+        }
+
         if (profileMatch && profileMatch.status !== 'inactive') {
           const secondaryAppName = `AuthHeal_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
           const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
           const secondaryAuth = getAuth(secondaryApp);
           try {
             try {
-              const newCred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, password);
+              await createUserWithEmailAndPassword(secondaryAuth, authEmail, password);
               await secondaryAuth.signOut();
               await deleteApp(secondaryApp);
 
               // Sign in on main auth
               const retryCred = await signInWithEmailAndPassword(auth, authEmail, password);
-              if (profileMatch.pendingPassword) {
-                await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
-              }
               setFirebaseUser(retryCred.user);
               setCurrentUser(profileMatch);
               setIsLoading(false);
@@ -552,18 +579,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try {
                 await deleteApp(secondaryApp);
               } catch {}
-              // If user already exists in auth, attempt direct sign in on main auth
+              // If user already exists in auth or password mismatch, sign in directly or force sign in
               try {
                 const retryCred = await signInWithEmailAndPassword(auth, authEmail, password);
-                if (profileMatch.pendingPassword) {
-                  await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
-                }
                 setFirebaseUser(retryCred.user);
                 setCurrentUser(profileMatch);
                 setIsLoading(false);
                 return { success: true };
               } catch (retryMainErr) {
-                // If password does not match auth, update auth password or proceed
+                // If standard sign in failed, sign in using secondary auth and set session
+                const secondaryApp2 = initializeApp(firebaseConfig, secondaryAppName + '_2');
+                const secondaryAuth2 = getAuth(secondaryApp2);
+                try {
+                  const cred2 = await signInWithEmailAndPassword(secondaryAuth2, authEmail, password);
+                  const u2 = cred2.user;
+                  await secondaryAuth2.signOut();
+                  await deleteApp(secondaryApp2);
+
+                  setFirebaseUser(u2);
+                  setCurrentUser(profileMatch);
+                  setIsLoading(false);
+                  return { success: true };
+                } catch {
+                  try {
+                    await deleteApp(secondaryApp2);
+                  } catch {}
+                }
               }
             }
           } catch (healInnerErr) {
