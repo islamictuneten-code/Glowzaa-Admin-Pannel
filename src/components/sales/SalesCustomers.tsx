@@ -68,6 +68,15 @@ export const SalesCustomers: React.FC = () => {
     isOpen: false
   });
 
+  if (!currentSalesUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-teal-500/20 border-t-[#0F766E] rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Accessing retail shop portfolio...</p>
+      </div>
+    );
+  }
+
   // Filter customers by assigned sales rep or all
   const filteredCustomers = useMemo(() => {
     return customers.filter(c => {

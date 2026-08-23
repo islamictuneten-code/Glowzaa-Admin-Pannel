@@ -15,7 +15,16 @@ import {
 export const SalesSummary: React.FC = () => {
   const { orders, currentSalesUser, formatBDT } = useApp();
 
-  const myOrders = orders.filter(o => o.salesSellerId === currentSalesUser.id);
+  if (!currentSalesUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-teal-500/20 border-t-[#0F766E] rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Calculating sales performance metrics...</p>
+      </div>
+    );
+  }
+
+  const myOrders = orders.filter(o => o && currentSalesUser && o.salesSellerId === currentSalesUser.id);
   const totalBookedRevenue = myOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   const totalRealizedPaid = myOrders.reduce((sum, o) => sum + o.paidAmount, 0);
   const totalPendingDue = myOrders.reduce((sum, o) => sum + o.dueAmount, 0);

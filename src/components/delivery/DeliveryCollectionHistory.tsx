@@ -15,7 +15,16 @@ export const DeliveryCollectionHistory: React.FC = () => {
   const { collections, currentDeliveryUser, formatBDT } = useApp();
   const [search, setSearch] = useState('');
 
-  const myCollections = collections.filter(c => c.collectorId === currentDeliveryUser.id);
+  if (!currentDeliveryUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Syncing personal collection history...</p>
+      </div>
+    );
+  }
+
+  const myCollections = collections.filter(c => c && currentDeliveryUser && c.collectorId === currentDeliveryUser.id);
 
   const filteredCollections = myCollections.filter(c =>
     c.collectionNumber.toLowerCase().includes(search.toLowerCase()) ||

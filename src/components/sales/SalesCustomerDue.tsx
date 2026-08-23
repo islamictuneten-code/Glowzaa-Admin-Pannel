@@ -27,6 +27,15 @@ export const SalesCustomerDue: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  if (!currentSalesUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Calculating portfolio due outstandings...</p>
+      </div>
+    );
+  }
+
   // Match customers assigned to this sales representative
   const myCustomers = useMemo(() => {
     return customers.filter(c => 

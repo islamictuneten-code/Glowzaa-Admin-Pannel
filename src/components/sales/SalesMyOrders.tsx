@@ -17,11 +17,21 @@ export const SalesMyOrders: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  if (!currentSalesUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-teal-500/20 border-t-[#0F766E] rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Filtering your booked invoices...</p>
+      </div>
+    );
+  }
+
   const myOrders = orders.filter(o => 
-    o.salesSellerId === currentSalesUser.id || 
-    o.salesUserId === currentSalesUser.id || 
-    o.createdBy === currentSalesUser.id ||
-    !o.salesSellerId // Fallback if general order
+    (o && currentSalesUser && (
+      o.salesSellerId === currentSalesUser.id || 
+      o.salesUserId === currentSalesUser.id || 
+      o.createdBy === currentSalesUser.id
+    )) || !o.salesSellerId // Fallback if general order
   );
 
   const filteredOrders = myOrders.filter(o => {

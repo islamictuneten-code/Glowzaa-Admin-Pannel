@@ -16,12 +16,23 @@ export const DeliveryPending: React.FC = () => {
   const { orders, currentDeliveryUser, setViewingOrder, setDeliveryTab, formatBDT } = useApp();
   const [search, setSearch] = useState('');
 
+  if (!currentDeliveryUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Filtering pending consignments...</p>
+      </div>
+    );
+  }
+
   const pendingOrders = orders.filter(
-    o => (o.deliveryStaffId === currentDeliveryUser.id || 
-          o.deliveryStaffId === currentDeliveryUser.uid || 
-          (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name.toLowerCase())) && 
-         o.deliveryStatus !== 'delivered' && 
-         o.orderStatus !== 'cancelled'
+    o => (o && currentDeliveryUser && (
+      o.deliveryStaffId === currentDeliveryUser.id || 
+      o.deliveryStaffId === currentDeliveryUser.uid || 
+      (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
+    )) && 
+    o.deliveryStatus !== 'delivered' && 
+    o.orderStatus !== 'cancelled'
   );
 
   const filteredOrders = pendingOrders.filter(o =>

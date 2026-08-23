@@ -21,6 +21,15 @@ export const DeliveryDueCollection: React.FC = () => {
   const [method, setMethod] = useState<PaymentMethod>('Cash');
   const [refNo, setRefNo] = useState('');
 
+  if (!currentDeliveryUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
+        <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Checking route territory collections...</p>
+      </div>
+    );
+  }
+
   // Shops in my delivery zone that have outstanding due
   const assignedZonesList = currentDeliveryUser.assignedZones || [currentDeliveryUser.assignedArea || ''];
   const zoneCustomersWithDue = customers.filter(
