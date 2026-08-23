@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { AuthUser, AuditLog, UserRole } from '../types';
+import { AuthUser, AuditLog, UserRole, DeviceSessionInfo } from '../types';
 import { cleanUndefined } from './firestoreService';
 
 export interface CreateStaffInput {
@@ -112,6 +112,40 @@ function normalizeAdminUser(admin: AuthUser | { uid: string; name?: string } | s
     return { uid: admin, name: fallbackName || 'Administrator' };
   }
   return { uid: admin.uid, name: admin.name || fallbackName || 'Administrator' };
+}
+
+/**
+ * Safely write audit log to Firestore with a unique document reference and merge handling
+ */
+export async function writeAuditLogSafely(logData: {
+  action: string;
+  targetUserId: string;
+  targetUserLoginId?: string;
+  targetUserName?: string;
+  targetRole?: string;
+  performedByUserId: string;
+  performedByUserName?: string;
+  timestamp?: string;
+  details?: string;
+}): Promise<void> {
+  try {
+    const cleanData = cleanUndefined({
+      action: logData.action,
+      targetUserId: logData.targetUserId,
+      targetUserLoginId: logData.targetUserLoginId || '',
+      targetUserName: logData.targetUserName || 'Staff User',
+      targetRole: logData.targetRole || 'staff',
+      performedByUserId: logData.performedByUserId,
+      performedByUserName: logData.performedByUserName || 'Administrator',
+      timestamp: logData.timestamp || new Date().toISOString(),
+      details: logData.details || ''
+    });
+
+    const newDocRef = doc(collection(db, 'audit_logs'));
+    await setDoc(newDocRef, cleanData, { merge: true });
+  } catch (err) {
+    console.warn('Audit log write notice:', err);
+  }
 }
 
 /**
@@ -227,20 +261,17 @@ export async function createStaffAccount(
     await setDoc(doc(db, 'users', newUid), cleanUndefined(userProfile));
 
     // 5. Create Audit Log
-    try {
-      addDoc(collection(db, 'audit_logs'), cleanUndefined({
-        action: 'STAFF_ACCOUNT_CREATED',
-        targetUserId: newUid,
-        targetUserName: cleanName,
-        targetRole: input.role,
-        performedByUserId: admin.uid,
-        performedByUserName: admin.name || 'Administrator',
-        timestamp: new Date().toISOString(),
-        details: `Created new ${input.role.toUpperCase()} staff account for "${cleanName}" with Login ID: "${cleanLoginId}"`
-      }));
-    } catch (auditErr) {
-      console.warn('Audit log write notice:', auditErr);
-    }
+    writeAuditLogSafely({
+      action: 'STAFF_ACCOUNT_CREATED',
+      targetUserId: newUid,
+      targetUserLoginId: cleanLoginId,
+      targetUserName: cleanName,
+      targetRole: input.role,
+      performedByUserId: admin.uid,
+      performedByUserName: admin.name || 'Administrator',
+      timestamp: new Date().toISOString(),
+      details: `Created new ${input.role.toUpperCase()} staff account for "${cleanName}" with Login ID: "${cleanLoginId}"`
+    });
 
     return { success: true, user: userProfile };
   } catch (error: any) {
@@ -291,24 +322,20 @@ export async function updateStaffProfile(
     // Use setDoc with merge: true so it creates or updates seamlessly even if synthesized
     await setDoc(userRef, cleanUndefined(payload), { merge: true });
 
-    // Write audit log
-    try {
-      addDoc(collection(db, 'audit_logs'), cleanUndefined({
-        action: isRoleChanged ? 'STAFF_ROLE_CHANGED' : 'STAFF_PROFILE_UPDATED',
-        targetUserId: userId,
-        targetUserLoginId: targetLoginId || existingData.loginId || existingData.email || userId,
-        targetUserName: updates.name || existingData.name || 'Staff User',
-        targetRole: updates.role || existingData.role || 'sales',
-        performedByUserId: admin.uid,
-        performedByUserName: admin.name || 'Administrator',
-        timestamp: new Date().toISOString(),
-        details: isRoleChanged 
-          ? `Role updated from ${(existingData.role || 'unknown').toUpperCase()} to ${updates.role?.toUpperCase()}`
-          : `Staff profile updated for ${updates.name || existingData.name || userId}`
-      }));
-    } catch (auditErr) {
-      console.warn('Audit log write notice:', auditErr);
-    }
+    // Write audit log safely
+    writeAuditLogSafely({
+      action: isRoleChanged ? 'STAFF_ROLE_CHANGED' : 'STAFF_PROFILE_UPDATED',
+      targetUserId: userId,
+      targetUserLoginId: targetLoginId || existingData.loginId || existingData.email || userId,
+      targetUserName: updates.name || existingData.name || 'Staff User',
+      targetRole: updates.role || existingData.role || 'sales',
+      performedByUserId: admin.uid,
+      performedByUserName: admin.name || 'Administrator',
+      timestamp: new Date().toISOString(),
+      details: isRoleChanged 
+        ? `Role updated from ${(existingData.role || 'unknown').toUpperCase()} to ${updates.role?.toUpperCase()}`
+        : `Staff profile updated for ${updates.name || existingData.name || userId}`
+    });
 
     return { success: true };
   } catch (error: any) {
@@ -344,8 +371,8 @@ export async function toggleStaffStatus(
       updatedBy: admin.uid
     }));
 
-    // Write audit log
-    addDoc(collection(db, 'audit_logs'), cleanUndefined({
+    // Write audit log safely
+    writeAuditLogSafely({
       action: newStatus === 'inactive' ? 'STAFF_ACCOUNT_DISABLED' : 'STAFF_ACCOUNT_ENABLED',
       targetUserId: userId,
       targetUserLoginId: targetLoginId || existingData.loginId || existingData.email,
@@ -357,7 +384,7 @@ export async function toggleStaffStatus(
       details: newStatus === 'inactive' 
         ? `Account disabled for "${existingData.name}" (${existingData.loginId || existingData.email}). ${reason ? `Reason: ${reason}` : ''}`
         : `Account re-enabled for "${existingData.name}" (${existingData.loginId || existingData.email}).`
-    }));
+    });
 
     return { success: true };
   } catch (error: any) {
@@ -389,8 +416,8 @@ export async function resetStaffPasswordDirectly(
     const targetRole = isUserObj ? staffUserOrEmail.role : 'staff';
     const loginId = isUserObj ? (staffUserOrEmail.loginId || staffUserOrEmail.email) : (targetLoginId || email);
 
-    // Write audit log indicating password reset
-    addDoc(collection(db, 'audit_logs'), cleanUndefined({
+    // Write audit log indicating password reset safely
+    writeAuditLogSafely({
       action: 'STAFF_PASSWORD_RESET',
       targetUserId,
       targetUserLoginId: loginId,
@@ -400,7 +427,7 @@ export async function resetStaffPasswordDirectly(
       performedByUserName: admin.name || 'Administrator',
       timestamp: new Date().toISOString(),
       details: `Password reset performed for "${targetUserName}" (${loginId})`
-    }));
+    });
 
     // If an email address is valid, trigger a password reset email as backup
     if (email.includes('@') && !email.endsWith('@glowzaa.local')) {
@@ -427,7 +454,7 @@ export async function sendStaffResetEmail(
   try {
     await sendPasswordResetEmail(auth, email);
 
-    addDoc(collection(db, 'audit_logs'), cleanUndefined({
+    writeAuditLogSafely({
       action: 'STAFF_PASSWORD_RESET',
       targetUserId: email,
       targetUserName: staffName,
@@ -436,7 +463,7 @@ export async function sendStaffResetEmail(
       performedByUserName: adminUser.name || 'Admin',
       timestamp: new Date().toISOString(),
       details: `Password reset email dispatched to ${email}`
-    }));
+    });
 
     return { success: true };
   } catch (error: any) {
@@ -542,11 +569,229 @@ export function subscribeStaffUsers(callback: (users: AuthUser[]) => void): () =
         monthlyTarget: data.monthlyTarget,
         commissionRate: data.commissionRate,
         createdBy: data.createdBy,
-        createdByName: data.createdByName
+        createdByName: data.createdByName,
+        sessionRevokedAt: data.sessionRevokedAt,
+        sessionVersion: data.sessionVersion,
+        activeSessions: data.activeSessions || []
       };
     }) as AuthUser[];
     callback(users);
   }, (error) => {
     console.error('Error in subscribeStaffUsers:', error);
   });
+}
+
+/**
+ * Detect client device, browser, and OS info
+ */
+export function getDeviceClientInfo(existingSessionId?: string): DeviceSessionInfo {
+  let sessionId = existingSessionId;
+  if (!sessionId && typeof window !== 'undefined') {
+    sessionId = localStorage.getItem('glowzaa_client_session_id') || '';
+    if (!sessionId) {
+      sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      try {
+        localStorage.setItem('glowzaa_client_session_id', sessionId);
+      } catch {}
+    }
+  }
+  if (!sessionId) {
+    sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  
+  // OS Detection
+  let os = 'Unknown OS';
+  if (/Windows NT 10.0|Windows NT 11.0/i.test(ua)) os = 'Windows 10/11';
+  else if (/Windows NT 6.3/i.test(ua)) os = 'Windows 8.1';
+  else if (/Windows/i.test(ua)) os = 'Windows PC';
+  else if (/Android/i.test(ua)) os = 'Android OS';
+  else if (/iPhone/i.test(ua)) os = 'Apple iOS (iPhone)';
+  else if (/iPad/i.test(ua)) os = 'Apple iPadOS';
+  else if (/Macintosh|Mac OS X/i.test(ua)) os = 'macOS Apple Mac';
+  else if (/Linux/i.test(ua)) os = 'Linux OS';
+  else if (/CrOS/i.test(ua)) os = 'ChromeOS';
+
+  // Browser Detection
+  let browser = 'Web Browser';
+  if (/Edg\//i.test(ua)) browser = 'Microsoft Edge';
+  else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua) && !/OPR\//i.test(ua)) browser = 'Google Chrome';
+  else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Apple Safari';
+  else if (/Firefox\//i.test(ua)) browser = 'Mozilla Firefox';
+  else if (/OPR\//i.test(ua) || /Opera/i.test(ua)) browser = 'Opera Browser';
+  else if (/SamsungBrowser/i.test(ua)) browser = 'Samsung Internet';
+
+  // Device Type
+  let deviceType: 'desktop' | 'mobile' | 'tablet' = 'desktop';
+  if (/iPad|Tablet/i.test(ua)) {
+    deviceType = 'tablet';
+  } else if (/Mobi|Android|iPhone|iPod/i.test(ua)) {
+    deviceType = 'mobile';
+  }
+
+  const deviceName = `${browser} on ${os}`;
+  const nowIso = new Date().toISOString();
+
+  return {
+    sessionId,
+    deviceName,
+    deviceType,
+    browser,
+    os,
+    createdAt: nowIso,
+    lastActiveAt: nowIso,
+    isCurrent: true
+  };
+}
+
+/**
+ * Register or update the current device session in Firestore users/{uid}
+ */
+export async function registerOrUpdateDeviceSession(
+  uid: string,
+  sessionInfo: DeviceSessionInfo
+): Promise<void> {
+  if (!uid || !sessionInfo.sessionId) return;
+
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data();
+    const existingSessions: DeviceSessionInfo[] = Array.isArray(data.activeSessions) ? data.activeSessions : [];
+
+    // Filter out sessions older than 30 days or identical sessionId
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const filteredSessions = existingSessions.filter(s => {
+      if (s.sessionId === sessionInfo.sessionId) return false;
+      const createdTime = new Date(s.lastActiveAt || s.createdAt).getTime();
+      return !isNaN(createdTime) && createdTime > thirtyDaysAgo;
+    });
+
+    const updatedSessions: DeviceSessionInfo[] = [
+      {
+        sessionId: sessionInfo.sessionId,
+        deviceName: sessionInfo.deviceName,
+        deviceType: sessionInfo.deviceType,
+        browser: sessionInfo.browser,
+        os: sessionInfo.os,
+        createdAt: sessionInfo.createdAt || new Date().toISOString(),
+        lastActiveAt: new Date().toISOString()
+      },
+      ...filteredSessions
+    ].slice(0, 15); // Max 15 active sessions retained
+
+    await setDoc(userRef, {
+      activeSessions: updatedSessions,
+      lastLoginAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Notice registering device session:', err);
+  }
+}
+
+/**
+ * Log out all devices (or all OTHER devices) for a user
+ */
+export async function logoutAllDevicesInFirestore(
+  uid: string,
+  keepCurrentSessionId?: string,
+  adminUser?: AuthUser | { uid: string; name?: string } | string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) {
+      return { success: false, error: 'User profile not found.' };
+    }
+
+    const userData = snap.data() as AuthUser;
+    const nowIso = new Date().toISOString();
+    const existingSessions: DeviceSessionInfo[] = Array.isArray(userData.activeSessions) ? userData.activeSessions : [];
+
+    let updatedSessions: DeviceSessionInfo[] = [];
+    if (keepCurrentSessionId) {
+      // Keep only current session
+      updatedSessions = existingSessions.filter(s => s.sessionId === keepCurrentSessionId);
+    }
+
+    const newVersion = (userData.sessionVersion || 1) + 1;
+
+    await setDoc(userRef, {
+      sessionRevokedAt: nowIso,
+      sessionVersion: newVersion,
+      activeSessions: updatedSessions,
+      updatedAt: nowIso
+    }, { merge: true });
+
+    // Write audit log safely
+    const admin = adminUser ? normalizeAdminUser(adminUser) : { uid, name: userData.name || 'User' };
+    writeAuditLogSafely({
+      action: 'STAFF_ALL_DEVICES_LOGGED_OUT',
+      targetUserId: uid,
+      targetUserLoginId: userData.loginId || userData.email || uid,
+      targetUserName: userData.name || 'Staff User',
+      targetRole: userData.role || 'sales',
+      performedByUserId: admin.uid,
+      performedByUserName: admin.name || 'Administrator',
+      timestamp: nowIso,
+      details: keepCurrentSessionId 
+        ? `All other device sessions terminated (retained current active session: ${keepCurrentSessionId})` 
+        : `Terminated all active device sessions across all platforms for ${userData.name || uid}`
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error logging out all devices:', err);
+    return { success: false, error: err.message || 'Failed to logout devices.' };
+  }
+}
+
+/**
+ * Revoke a specific single device session in Firestore
+ */
+export async function revokeDeviceSessionInFirestore(
+  uid: string,
+  sessionId: string,
+  adminUser?: AuthUser | { uid: string; name?: string } | string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) {
+      return { success: false, error: 'User profile not found.' };
+    }
+
+    const userData = snap.data() as AuthUser;
+    const existingSessions: DeviceSessionInfo[] = Array.isArray(userData.activeSessions) ? userData.activeSessions : [];
+    const targetSession = existingSessions.find(s => s.sessionId === sessionId);
+    const updatedSessions = existingSessions.filter(s => s.sessionId !== sessionId);
+    const nowIso = new Date().toISOString();
+
+    await setDoc(userRef, {
+      activeSessions: updatedSessions,
+      updatedAt: nowIso
+    }, { merge: true });
+
+    // Write audit log safely
+    const admin = adminUser ? normalizeAdminUser(adminUser) : { uid, name: userData.name || 'User' };
+    writeAuditLogSafely({
+      action: 'STAFF_SESSION_REVOKED',
+      targetUserId: uid,
+      targetUserLoginId: userData.loginId || userData.email || uid,
+      targetUserName: userData.name || 'Staff User',
+      targetRole: userData.role || 'sales',
+      performedByUserId: admin.uid,
+      performedByUserName: admin.name || 'Administrator',
+      timestamp: nowIso,
+      details: `Revoked session ${sessionId} (${targetSession?.deviceName || 'Device'}) for ${userData.name || uid}`
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error revoking device session:', err);
+    return { success: false, error: err.message || 'Failed to revoke device session.' };
+  }
 }

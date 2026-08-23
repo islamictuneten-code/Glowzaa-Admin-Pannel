@@ -19,11 +19,18 @@ import {
   collection,
   query,
   where,
-  serverTimestamp
+  serverTimestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { AuthUser, UserRole } from '../types';
-import { resolveLoginIdToEmail } from '../services/staffAuthService';
+import { AuthUser, UserRole, DeviceSessionInfo } from '../types';
+import { 
+  resolveLoginIdToEmail, 
+  getDeviceClientInfo, 
+  registerOrUpdateDeviceSession, 
+  logoutAllDevicesInFirestore, 
+  revokeDeviceSessionInFirestore 
+} from '../services/staffAuthService';
 
 interface RegisterData {
   name: string;
@@ -46,9 +53,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   authError: string | null;
+  currentSessionId: string;
+  activeSessions: DeviceSessionInfo[];
   login: (loginIdentifier: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  logoutAllDevices: (alsoThisDevice?: boolean) => Promise<{ success: boolean; error?: string }>;
+  revokeSession: (sessionId: string, targetUid?: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   clearError: () => void;
   refreshUserProfile: () => Promise<void>;
@@ -61,6 +72,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  
+  const [currentSessionId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        let sess = localStorage.getItem('glowzaa_client_session_id');
+        if (!sess) {
+          sess = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          localStorage.setItem('glowzaa_client_session_id', sess);
+        }
+        return sess;
+      } catch {}
+    }
+    return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  });
+
+  const [activeSessions, setActiveSessions] = useState<DeviceSessionInfo[]>([]);
 
   // Helper to safely format createdAt from Firestore Timestamp or string
   const formatCreatedAt = (val: any): string => {
@@ -161,7 +188,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         vehicleNumber: data.vehicleNumber,
         vehicleType: data.vehicleType,
         monthlyTarget: data.monthlyTarget,
-        commissionRate: data.commissionRate
+        commissionRate: data.commissionRate,
+        sessionRevokedAt: data.sessionRevokedAt,
+        sessionVersion: data.sessionVersion,
+        activeSessions: Array.isArray(data.activeSessions) ? data.activeSessions : []
       };
 
       return profile;
@@ -194,9 +224,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Listen to Firebase Auth state changes
+  // Listen to Firebase Auth state changes & Firestore live session synchronization
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeFirestoreDoc: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubscribeFirestoreDoc) {
+        unsubscribeFirestoreDoc();
+        unsubscribeFirestoreDoc = null;
+      }
+
       setIsLoading(true);
       if (user) {
         const profile = await fetchUserProfile(user);
@@ -205,27 +242,123 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await firebaseSignOut(auth);
             setFirebaseUser(null);
             setCurrentUser(null);
+            setActiveSessions([]);
             setAuthError('Your account has been disabled. Please contact the administrator.');
-          } else {
-            setFirebaseUser(user);
-            setCurrentUser(profile);
-            setAuthError(null);
+            setIsLoading(false);
+            return;
           }
+
+          // Register this device session in Firestore
+          const deviceInfo = getDeviceClientInfo(currentSessionId);
+          let sessionCreatedAt = '';
+          try {
+            sessionCreatedAt = localStorage.getItem('glowzaa_session_created_at') || '';
+            if (!sessionCreatedAt) {
+              sessionCreatedAt = deviceInfo.createdAt;
+              localStorage.setItem('glowzaa_session_created_at', sessionCreatedAt);
+            }
+          } catch {
+            sessionCreatedAt = deviceInfo.createdAt;
+          }
+          deviceInfo.createdAt = sessionCreatedAt;
+
+          await registerOrUpdateDeviceSession(user.uid, deviceInfo);
+
+          setFirebaseUser(user);
+          setCurrentUser(profile);
+          setAuthError(null);
+
+          // Listen live to users/{uid} document for real-time remote session revocation & status changes
+          unsubscribeFirestoreDoc = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+            if (!docSnap.exists()) return;
+            const data = docSnap.data();
+
+            // 1. Account disabled check
+            if (data.status === 'inactive') {
+              firebaseSignOut(auth);
+              setFirebaseUser(null);
+              setCurrentUser(null);
+              setActiveSessions([]);
+              setAuthError('Your account has been disabled by HQ Administrator.');
+              return;
+            }
+
+            const rawSessions: DeviceSessionInfo[] = Array.isArray(data.activeSessions) ? data.activeSessions : [];
+            
+            // 2. Cross-device remote logout check
+            const revokedAt = data.sessionRevokedAt;
+            const sessionCreationTime = new Date(sessionCreatedAt || 0).getTime();
+            const revocationTime = revokedAt ? new Date(revokedAt).getTime() : 0;
+            const isCurrentSessionFound = rawSessions.some(s => s.sessionId === currentSessionId);
+
+            if (revocationTime > sessionCreationTime && !isCurrentSessionFound) {
+              try {
+                localStorage.removeItem('glowzaa_session_created_at');
+              } catch {}
+              firebaseSignOut(auth);
+              setFirebaseUser(null);
+              setCurrentUser(null);
+              setActiveSessions([]);
+              setAuthError('You have been logged out because all sessions were terminated remotely. (সমস্ত ডিভাইস থেকে লগআউট সম্পন্ন হয়েছে)');
+              return;
+            }
+
+            // Mark current session and sort
+            const formattedSessions = rawSessions.map(s => ({
+              ...s,
+              isCurrent: s.sessionId === currentSessionId
+            })).sort((a, b) => {
+              if (a.isCurrent) return -1;
+              if (b.isCurrent) return 1;
+              return new Date(b.lastActiveAt || b.createdAt).getTime() - new Date(a.lastActiveAt || a.createdAt).getTime();
+            });
+
+            setActiveSessions(formattedSessions);
+
+            setCurrentUser(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                name: data.name || prev.name,
+                email: data.email || prev.email,
+                phone: data.phone || prev.phone,
+                role: data.role || prev.role,
+                status: data.status || prev.status,
+                avatar: data.avatar || prev.avatar,
+                photoURL: data.photoURL || prev.photoURL,
+                title: data.title || prev.title,
+                department: data.department || prev.department,
+                sessionRevokedAt: data.sessionRevokedAt,
+                sessionVersion: data.sessionVersion,
+                activeSessions: formattedSessions
+              };
+            });
+          }, (err) => {
+            console.warn('Firestore live user profile subscription notice:', err);
+          });
+
         } else {
           await firebaseSignOut(auth);
           setFirebaseUser(null);
           setCurrentUser(null);
+          setActiveSessions([]);
           setAuthError('Access Denied: Could not load staff profile.');
         }
       } else {
         setFirebaseUser(null);
         setCurrentUser(null);
+        setActiveSessions([]);
       }
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeFirestoreDoc) {
+        unsubscribeFirestoreDoc();
+      }
+    };
+  }, [currentSessionId]);
 
   const clearError = () => {
     setAuthError(null);
@@ -317,6 +450,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthError(errMsg);
         return { success: false, error: errMsg };
       }
+
+      // Record session info
+      const nowIso = new Date().toISOString();
+      try {
+        localStorage.setItem('glowzaa_session_created_at', nowIso);
+      } catch {}
+
+      const deviceInfo = getDeviceClientInfo(currentSessionId);
+      deviceInfo.createdAt = nowIso;
+      await registerOrUpdateDeviceSession(user.uid, deviceInfo);
 
       // Record lastLoginAt in Firestore
       try {
@@ -466,14 +609,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setIsLoading(true);
     try {
+      if (currentUser?.uid && currentSessionId) {
+        await revokeDeviceSessionInFirestore(currentUser.uid, currentSessionId, currentUser).catch(() => {});
+      }
+      try {
+        localStorage.removeItem('glowzaa_session_created_at');
+      } catch {}
       await firebaseSignOut(auth);
       setFirebaseUser(null);
       setCurrentUser(null);
+      setActiveSessions([]);
       setAuthError(null);
     } catch (err) {
       console.error('Error signing out of Firebase:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Log Out All Devices (Optionally keeping or terminating this device)
+  const logoutAllDevices = async (alsoThisDevice: boolean = true): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser?.uid) {
+      return { success: false, error: 'User is not authenticated.' };
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await logoutAllDevicesInFirestore(
+        currentUser.uid,
+        alsoThisDevice ? undefined : currentSessionId,
+        currentUser
+      );
+
+      if (res.success) {
+        if (alsoThisDevice) {
+          try {
+            localStorage.removeItem('glowzaa_session_created_at');
+          } catch {}
+          await firebaseSignOut(auth);
+          setFirebaseUser(null);
+          setCurrentUser(null);
+          setActiveSessions([]);
+        } else {
+          // Re-sync active sessions locally
+          const currentDev = getDeviceClientInfo(currentSessionId);
+          setActiveSessions([{ ...currentDev, isCurrent: true }]);
+        }
+        return { success: true };
+      } else {
+        return { success: false, error: res.error || 'Failed to terminate all sessions.' };
+      }
+    } catch (err: any) {
+      console.error('Error in logoutAllDevices:', err);
+      return { success: false, error: err.message || 'Failed to terminate sessions.' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Revoke a single specific session
+  const revokeSession = async (sessionId: string, targetUid?: string): Promise<{ success: boolean; error?: string }> => {
+    const uid = targetUid || currentUser?.uid;
+    if (!uid) return { success: false, error: 'User not identified.' };
+
+    try {
+      const res = await revokeDeviceSessionInFirestore(uid, sessionId, currentUser || undefined);
+      if (res.success) {
+        if (sessionId === currentSessionId) {
+          await logout();
+        } else {
+          setActiveSessions(prev => prev.filter(s => s.sessionId !== sessionId));
+        }
+        return { success: true };
+      }
+      return res;
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to revoke device session.' };
     }
   };
 
@@ -508,9 +719,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: Boolean(currentUser && firebaseUser),
         isLoading,
         authError,
+        currentSessionId,
+        activeSessions,
         login,
         register,
         logout,
+        logoutAllDevices,
+        revokeSession,
         resetPassword,
         clearError,
         refreshUserProfile
@@ -528,4 +743,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
 

@@ -1,5 +1,17 @@
 export type UserRole = 'admin' | 'sales' | 'delivery';
 
+export interface DeviceSessionInfo {
+  sessionId: string;
+  deviceName: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  browser: string;
+  os: string;
+  ipOrLocation?: string;
+  createdAt: string;
+  lastActiveAt: string;
+  isCurrent?: boolean;
+}
+
 export interface AuthUser {
   uid: string;
   id?: string;
@@ -29,6 +41,9 @@ export interface AuthUser {
   vehicleType?: 'Covered Van' | 'Motorcycle' | 'Mini-Truck' | 'Bicycle Delivery' | string;
   monthlyTarget?: number;
   commissionRate?: number;
+  sessionRevokedAt?: string;
+  sessionVersion?: number;
+  activeSessions?: DeviceSessionInfo[];
 }
 
 export interface AuditLog {
@@ -39,7 +54,9 @@ export interface AuditLog {
     | 'STAFF_ACCOUNT_ENABLED' 
     | 'STAFF_ROLE_CHANGED' 
     | 'STAFF_PASSWORD_RESET' 
-    | 'STAFF_PROFILE_UPDATED' 
+    | 'STAFF_PROFILE_UPDATED'
+    | 'STAFF_ALL_DEVICES_LOGGED_OUT'
+    | 'STAFF_SESSION_REVOKED'
     | string;
   targetUserId: string;
   targetUserName: string;
