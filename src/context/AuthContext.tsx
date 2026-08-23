@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
@@ -9,7 +10,8 @@ import {
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence,
-  inMemoryPersistence
+  inMemoryPersistence,
+  getAuth
 } from 'firebase/auth';
 import { 
   doc, 
@@ -24,6 +26,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import firebaseConfig from '../../firebase-applet-config.json';
 import { AuthUser, UserRole, DeviceSessionInfo } from '../types';
 import { 
   resolveLoginIdToEmail, 
@@ -492,7 +495,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return { success: true };
     } catch (err: any) {
-      // AUTO-HEALING: If sign-in failed, check if staff profile exists in Firestore and auto-provision Auth user if missing
+      // AUTO-HEALING: If sign-in failed, check if staff profile exists in Firestore and auto-provision / sync Auth user
       try {
         let profileMatch: any = null;
         let matchedUid = '';
@@ -512,24 +515,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (profileMatch && profileMatch.status !== 'inactive') {
+          const secondaryAppName = `AuthHeal_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+          const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+          const secondaryAuth = getAuth(secondaryApp);
           try {
-            const newCred = await createUserWithEmailAndPassword(auth, authEmail, password);
-            if (profileMatch.pendingPassword) {
-              await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
+            try {
+              const newCred = await createUserWithEmailAndPassword(secondaryAuth, authEmail, password);
+              await secondaryAuth.signOut();
+              await deleteApp(secondaryApp);
+
+              // Sign in on main auth
+              const retryCred = await signInWithEmailAndPassword(auth, authEmail, password);
+              if (profileMatch.pendingPassword) {
+                await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
+              }
+              setFirebaseUser(retryCred.user);
+              setCurrentUser(profileMatch);
+              setIsLoading(false);
+              return { success: true };
+            } catch (createErr: any) {
+              try {
+                await deleteApp(secondaryApp);
+              } catch {}
+              // If user already exists in auth, try signing in with profileMatch.pendingPassword if present or accept if password matches
+              if (profileMatch.pendingPassword && password === profileMatch.pendingPassword) {
+                // If pendingPassword matches, update Firestore user document or sign in
+                await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
+              }
             }
-            setFirebaseUser(newCred.user);
-            setCurrentUser(profileMatch);
-            setIsLoading(false);
-            return { success: true };
-          } catch (createAuthErr: any) {
-            // If user already exists in auth (e.g. wrong password), proceed to standard error handling
+          } catch (healInnerErr) {
+            try {
+              await deleteApp(secondaryApp);
+            } catch {}
           }
         }
       } catch (healingErr) {
         console.warn('Auto-healing notice:', healingErr);
+      } finally {
+        setIsLoading(false);
       }
 
-      setIsLoading(false);
       let errorMessage = 'Invalid Login ID or password. Please verify your credentials.';
 
       switch (err.code) {
