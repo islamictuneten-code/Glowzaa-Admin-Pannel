@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import { subscribeStaffUsers } from '../services/staffAuthService';
 import { 
   AdminTab, 
   AuthUser,
@@ -91,7 +92,9 @@ import {
   editExpenseInFirestore,
   deleteExpenseInFirestore,
   wipeAllApplicationDataInFirestore,
-  resetDemoDataInFirestore
+  resetDemoDataInFirestore,
+  saveCompanySettingsToFirestore,
+  subscribeCompanySettings
 } from '../services/firestoreService';
 
 export interface Toast {
@@ -275,6 +278,10 @@ interface AppContextType {
   toasts: Toast[];
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
+
+  // Company Settings
+  companySettings: CompanySettings | null;
+  saveCompanySettings: (settings: CompanySettings) => Promise<{ success: boolean; error?: string }>;
 
   // Global search & helpers
   searchQuery: string;
@@ -534,6 +541,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isMounted) setIsExpensesLoading(false);
     });
 
+    // 11. Subscribe to Staff Users
+    const unsubStaff = subscribeStaffUsers((users) => {
+      if (isMounted) {
+        const sales = users.filter(u => u.role === 'sales').map(u => ({
+          id: u.uid,
+          name: u.name,
+          phone: u.phone || '',
+          territory: u.territory || '',
+          monthlyTarget: u.monthlyTarget || 450000,
+          achievedSales: 0, 
+          totalOrders: 0,
+          commissionRate: u.commissionRate || 2.0,
+          activeCustomers: 0,
+          avatar: u.avatar || 'ST',
+          photoURL: u.photoURL,
+          status: u.status as 'active' | 'on_leave'
+        })) as SalesStaff[];
+        
+        const delivery = users.filter(u => u.role === 'delivery').map(u => ({
+          id: u.uid,
+          name: u.name,
+          phone: u.phone || '',
+          vehicleNumber: u.vehicleNumber || '',
+          vehicleType: u.vehicleType || 'Covered Van',
+          activeDeliveriesToday: 0,
+          completedDeliveriesToday: 0,
+          cashInHand: 0,
+          avatar: u.avatar || 'ST',
+          photoURL: u.photoURL,
+          status: u.status as 'on_duty' | 'available' | 'off_duty'
+        })) as DeliveryStaff[];
+        
+        setSalesStaff(sales);
+        setDeliveryStaff(delivery);
+      }
+    });
+
     return () => {
       isMounted = false;
       unsubCategories();
@@ -546,6 +590,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubHistory();
       unsubHandovers();
       unsubExpenses();
+      unsubStaff();
     };
   }, [isAuthenticated, isLoading, firebaseUser]);
 
@@ -580,6 +625,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
   }, [payments, cashHandovers]);
+
+  // Dynamically calculate Sales Staff achieved sales from Firestore orders
+  useEffect(() => {
+    setSalesStaff(prevStaff => {
+      return prevStaff.map(seller => {
+        const myOrders = orders.filter(o => 
+          o.salesSellerId === seller.id || 
+          o.salesUserId === seller.id || 
+          o.salesUserId === seller.uid ||
+          (seller.id === 'sales-01' && (o.salesUserId === 'sales-01' || !o.salesUserId))
+        );
+        const achieved = myOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+        return {
+          ...seller,
+          achievedSales: achieved,
+          totalOrders: myOrders.length
+        };
+      });
+    });
+  }, [orders]);
 
   useEffect(() => {
     if (currentDeliveryUser) {
@@ -642,6 +707,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+
+  // Subscribe to company settings
+  useEffect(() => {
+    if (!isAuthenticated) return; // Only subscribe if authenticated
+    const unsub = subscribeCompanySettings(setCompanySettings);
+    return unsub;
+  }, [isAuthenticated]);
+
+  const saveCompanySettings = async (settings: CompanySettings) => {
+    const res = await saveCompanySettingsToFirestore(settings);
+    if (res.success) {
+      addToast({ type: 'success', title: 'Settings Saved', message: 'Company settings updated.' });
+    } else {
+      addToast({ type: 'error', title: 'Settings Error', message: res.error || 'Failed to save settings.' });
+    }
+    return res;
+  }
 
   // Persist auxiliary state
   useEffect(() => {
@@ -2114,7 +2197,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         searchQuery,
         setSearchQuery,
-        formatBDT
+        formatBDT,
+
+        companySettings,
+        saveCompanySettings
       }}
     >
       {children}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Receipt, 
-  DollarSign, 
+  Banknote, 
   CheckCircle2, 
   Building, 
   Clock, 
@@ -90,7 +90,7 @@ export const DeliveryMoneyCollected: React.FC = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-teal-900">Current Cash in Driver Pouch</span>
               <div className="p-2 bg-teal-100 rounded-xl text-teal-700">
-                <DollarSign className="w-5 h-5" />
+                <Banknote className="w-5 h-5" />
               </div>
             </div>
             <div className="text-2xl sm:text-3xl font-extrabold text-teal-950 mt-1">{formatBDT(myCashInHand)}</div>

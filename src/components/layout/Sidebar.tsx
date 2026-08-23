@@ -23,12 +23,13 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  DollarSign,
+  Banknote,
   History,
   ShoppingBag,
   Calculator,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -78,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'orders', label: 'Orders', icon: <ShoppingCart className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
     { id: 'packing', label: 'Packing / Warehouse', icon: <Boxes className="w-4 h-4" />, badge: packingOrdersCount > 0 ? packingOrdersCount : undefined, badgeColor: 'bg-teal-100 text-teal-800' },
     { id: 'purchases', label: 'Purchase / Stock In', icon: <ShoppingBag className="w-4 h-4" /> },
-    { id: 'expenses', label: 'Operating Expenses', icon: <DollarSign className="w-4 h-4" />, badge: pendingExpensesCount > 0 ? pendingExpensesCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
+    { id: 'expenses', label: 'Operating Expenses', icon: <Banknote className="w-4 h-4" />, badge: pendingExpensesCount > 0 ? pendingExpensesCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
     { id: 'staff_management', label: 'Staff / User Accounts', icon: <ShieldCheck className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'sales_staff', label: 'Sales Staff', icon: <UserCheck className="w-4 h-4" /> },
     { id: 'delivery_staff', label: 'Delivery Staff', icon: <Truck className="w-4 h-4" /> },
@@ -89,6 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'inventory_reports', label: 'Inventory Reports', icon: <FileSpreadsheet className="w-4 h-4" /> },
     { id: 'profit_loss', label: 'Profit & Loss', icon: <Calculator className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
+    { id: 'warehouses', label: 'Warehouse Management', icon: <Building2 className="w-4 h-4" /> },
   ];
 
   const salesNavItems: { id: SalesTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
@@ -98,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'create_order', label: 'Create New Order', icon: <PlusCircle className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'my_orders', label: 'My Orders', icon: <ShoppingCart className="w-4 h-4" /> },
     { id: 'pending_orders', label: 'Pending Orders', icon: <Clock className="w-4 h-4" />, badge: myPendingSalesOrders > 0 ? myPendingSalesOrders : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
-    { id: 'expenses', label: 'Expense Claims', icon: <DollarSign className="w-4 h-4" /> },
+    { id: 'expenses', label: 'Expense Claims', icon: <Banknote className="w-4 h-4" /> },
     { id: 'customer_due', label: 'Customer Due', icon: <AlertCircle className="w-4 h-4" />, badge: overdueCustomersCount > 0 ? overdueCustomersCount : undefined, badgeColor: 'bg-red-100 text-red-800' },
     { id: 'sales_history', label: 'Sales History', icon: <History className="w-4 h-4" /> },
     { id: 'sales_summary', label: 'Sales Summary', icon: <FileSpreadsheet className="w-4 h-4" /> },
@@ -111,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'pending_deliveries', label: 'Pending Deliveries', icon: <Clock className="w-4 h-4" /> },
     { id: 'delivered_orders', label: 'Delivered Orders', icon: <CheckCircle2 className="w-4 h-4" />, badge: myCompletedToday > 0 ? myCompletedToday : undefined, badgeColor: 'bg-emerald-100 text-emerald-800' },
     { id: 'returned_orders', label: 'Returned Orders', icon: <XCircle className="w-4 h-4" />, badge: myReturnedCount > 0 ? myReturnedCount : undefined, badgeColor: 'bg-orange-100 text-orange-800' },
-    { id: 'due_collection', label: 'Due Collection', icon: <DollarSign className="w-4 h-4" /> },
+    { id: 'due_collection', label: 'Due Collection', icon: <Banknote className="w-4 h-4" /> },
     { id: 'money_collected', label: 'Money Collected', icon: <Receipt className="w-4 h-4" />, badge: formatBDT(currentDeliveryUser.cashInHand), badgeColor: 'bg-emerald-100 text-emerald-800' },
     { id: 'collection_history', label: 'Collection History', icon: <History className="w-4 h-4" /> },
   ];

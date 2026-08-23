@@ -182,7 +182,11 @@ export const MobileBottomNav: React.FC = () => {
                       : 'bg-transparent'
                   }`}
                 >
-                  <IconComponent className="w-[18px] h-[18px] shrink-0" />
+                  {item.id.includes('orders') ? (
+                    <span className="w-[18px] h-[18px] flex items-center justify-center text-sm font-bold">৳</span>
+                  ) : (
+                    <IconComponent className="w-[18px] h-[18px] shrink-0" />
+                  )}
                   {item.badge !== undefined && (
                     <span
                       className={`absolute -top-1 -right-1 text-[8px] min-w-[14px] h-[14px] px-1 rounded-full flex items-center justify-center ring-1 ring-[#087F7A] ${

@@ -17,7 +17,7 @@ import {
   CheckCircle2,
   XCircle,
   Sliders,
-  DollarSign,
+  Banknote,
   Info,
   ExternalLink,
   Layers,
@@ -743,7 +743,7 @@ export const AdminProducts: React.FC = () => {
           {/* SECTION 2: Pricing */}
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100 text-slate-900 font-bold text-xs uppercase tracking-wider mb-3">
-              <DollarSign className="w-4 h-4 text-emerald-600" />
+              <Banknote className="w-4 h-4 text-emerald-600" />
               <span>2. Pricing Tiers (BDT)</span>
             </div>
 

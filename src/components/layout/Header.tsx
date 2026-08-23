@@ -15,7 +15,7 @@ import {
   Building2,
   ChevronDown,
   Package,
-  DollarSign,
+  Banknote,
   LogOut,
   User,
   Check
@@ -204,7 +204,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
               onClick={() => setDeliveryTab('due_collection')}
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#087F7A] text-white hover:bg-[#075E5B] shadow-2xs transition-colors cursor-pointer"
             >
-              <DollarSign className="w-3.5 h-3.5" />
+              <Banknote className="w-3.5 h-3.5" />
               <span>Collect Due</span>
             </button>
           )}

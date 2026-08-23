@@ -28,6 +28,7 @@ import { AdminInventoryReports } from './components/admin/AdminInventoryReports'
 import { AdminProfitLoss } from './components/admin/AdminProfitLoss';
 import { AdminExpenses } from './components/admin/AdminExpenses';
 import { AdminSettings } from './components/admin/AdminSettings';
+import { AdminWarehouses } from './components/admin/AdminWarehouses';
 
 // Sales Components
 import { SalesOverview } from './components/sales/SalesOverview';
@@ -101,6 +102,8 @@ const DashboardContent: React.FC = () => {
           return <AdminInventoryReports />;
         case 'profit_loss':
           return <AdminProfitLoss />;
+        case 'warehouses':
+          return <AdminWarehouses />;
         case 'settings':
           return <AdminSettings />;
         default:

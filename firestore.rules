@@ -177,5 +177,11 @@ service cloud.firestore {
     }
 
 
+    // Settings Collection rules: Only Admins can edit company settings, all authenticated staff can read
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
   }
 }

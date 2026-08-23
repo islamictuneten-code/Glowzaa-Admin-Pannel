@@ -10,7 +10,7 @@ import {
   XCircle, 
   Clock, 
   FileText, 
-  DollarSign, 
+  Banknote, 
   Calendar, 
   User, 
   CreditCard, 
@@ -325,7 +325,7 @@ export const AdminExpenses: React.FC = () => {
             </p>
           </div>
           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 shrink-0">
-            <DollarSign className="w-5 h-5 sm:w-6 sm:h-6" />
+            <Banknote className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 

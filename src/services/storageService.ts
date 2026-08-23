@@ -135,58 +135,35 @@ export async function uploadStaffProfilePhoto(
   performedByUserId: string
 ): Promise<{ success: boolean; downloadUrl?: string; downloadURL?: string; error?: string }> {
   try {
-    // 1. Security & Validation check
     const validation = validateImageFile(file);
     if (!validation.valid) {
       return { success: false, error: validation.error };
     }
 
-    // 2. Compress and resize image client-side
-    const { blob, mimeType, extension } = await compressAndResizeImage(file);
-
-    // 3. Prepare unique storage reference
-    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const fileName = `${safeUserId}_${Date.now()}.${extension}`;
-    const storagePath = `staff_avatars/${fileName}`;
-    const storageRef = ref(storage, storagePath);
-
-    // 4. Upload to Firebase Storage
-    const metadata = {
-      contentType: mimeType,
-      customMetadata: {
-        targetUserId: userId,
-        uploadedBy: performedByUserId,
-        uploadedAt: new Date().toISOString()
-      }
-    };
-
-    await uploadBytes(storageRef, blob, metadata);
-
-    // 5. Retrieve HTTPS Download URL
-    const downloadUrl = await getDownloadURL(storageRef);
+    const { blob, mimeType } = await compressAndResizeImage(file);
+    
+    // Convert blob directly to Base64 Data URL to bypass Firebase Storage
+    // This fits well within Firestore's 1MB document limit since it's highly compressed
+    const base64Url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to convert image to base64'));
+      reader.readAsDataURL(blob);
+    });
 
     return {
       success: true,
-      downloadUrl,
-      downloadURL: downloadUrl
+      downloadUrl: base64Url,
+      downloadURL: base64Url
     };
   } catch (error: any) {
-    console.error('Firebase Storage upload error:', error);
-    let message = 'Failed to upload profile photo to Firebase Storage.';
-    if (error?.code === 'storage/unauthorized') {
-      message = 'Permission denied. Only authenticated administrators or profile owners can upload.';
-    } else if (error?.code === 'storage/quota-exceeded') {
-      message = 'Storage quota limit exceeded. Please contact system admin.';
-    } else if (error?.message) {
-      message = error.message;
-    }
+    console.error('Image processing error:', error);
     return {
       success: false,
-      error: message
+      error: error.message || 'Failed to process profile photo.'
     };
   }
 }
-
 /**
  * Extracts professional fallback initials from a user's name
  */

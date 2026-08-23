@@ -6,7 +6,7 @@ import {
   AlertCircle, 
   Search, 
   Phone, 
-  DollarSign, 
+  Banknote, 
   CheckCircle2, 
   Clock, 
   Building2,
@@ -260,7 +260,7 @@ export const SalesCustomerDue: React.FC = () => {
                         onClick={() => openCollectModal(cust)}
                         className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <DollarSign className="w-3 h-3" />
+                        <Banknote className="w-3 h-3" />
                         <span>Collect Due</span>
                       </button>
                       <button

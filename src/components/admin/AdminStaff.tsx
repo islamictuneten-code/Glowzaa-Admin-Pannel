@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { AuthUser, UserRole, AuditLog } from '../../types';
@@ -297,74 +299,51 @@ FINAL RECOMMENDATION
   };
 
   // Fetch staff users on load
-  const loadStaffList = async () => {
+  useEffect(() => {
     setIsLoadingStaff(true);
-    try {
-      const users = await fetchStaffUsers();
-      // If users is empty, synthesize from existing salesStaff and deliveryStaff for smooth first-time view
-      if (users.length === 0 && (salesStaff.length > 0 || deliveryStaff.length > 0)) {
-        const synthesized: AuthUser[] = [
-          {
-            uid: 'admin-master',
-            id: 'admin-master',
-            loginId: 'admin',
-            name: activeAdminUser?.name || 'Glowzaa Admin',
-            email: activeAdminUser?.email || 'admin@glowzaa.com',
-            phone: '01711000000',
-            role: 'admin',
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            avatar: 'GA',
-            title: 'Head of Operations & System Admin',
-            department: 'Executive HQ'
-          },
-          ...salesStaff.map((s, idx) => ({
-            uid: `sales-${s.id}`,
-            id: `sales-${s.id}`,
-            loginId: `seller0${idx + 1}`,
-            name: s.name,
-            email: `seller0${idx + 1}@glowzaa.local`,
-            phone: s.phone,
-            role: 'sales' as UserRole,
-            status: s.status as 'active' | 'inactive',
-            createdAt: new Date().toISOString(),
-            avatar: s.avatar,
-            title: 'Field Sales Executive',
-            department: 'Field Sales & Accounts',
-            salesStaffId: s.id,
-            territory: s.territory,
-            monthlyTarget: s.monthlyTarget,
-            commissionRate: s.commissionRate
-          })),
-          ...deliveryStaff.map((d, idx) => ({
-            uid: `delivery-${d.id}`,
-            id: `delivery-${d.id}`,
-            loginId: `delivery0${idx + 1}`,
-            name: d.name,
-            email: `delivery0${idx + 1}@glowzaa.local`,
-            phone: d.phone,
-            role: 'delivery' as UserRole,
-            status: d.status as 'active' | 'inactive',
-            createdAt: new Date().toISOString(),
-            avatar: d.avatar,
-            title: 'Delivery Courier & Dispatch',
-            department: 'Logistics Fleet',
-            deliveryStaffId: d.id,
-            vehicleNumber: d.vehicleNumber,
-            vehicleType: d.vehicleType,
-            assignedZones: d.assignedZones || [d.assignedArea || 'Dhaka Metro']
-          }))
-        ];
-        setStaffUsers(synthesized);
-      } else {
-        setStaffUsers(users);
-      }
-    } catch (err) {
-      console.error('Failed to load staff list:', err);
-    } finally {
+    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const users = snap.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          uid: docSnap.id,
+          id: docSnap.id,
+          loginId: data.loginId || data.email?.split('@')[0] || docSnap.id.slice(0, 6),
+          name: data.name || 'Staff Member',
+          email: data.email || '',
+          phone: data.phone || '',
+          role: (data.role as UserRole) || 'sales',
+          status: (data.status as 'active' | 'inactive') || 'active',
+          createdAt: data.createdAt ? (typeof data.createdAt === 'string' ? data.createdAt : data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()) : new Date().toISOString(),
+          lastLoginAt: data.lastLoginAt ? (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : undefined) : undefined,
+          updatedAt: data.updatedAt ? (typeof data.updatedAt === 'string' ? data.updatedAt : data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined) : undefined,
+          avatar: data.avatar || 'ST',
+          photoURL: data.photoURL,
+          title: data.title,
+          department: data.department,
+          staffId: data.staffId,
+          salesStaffId: data.salesStaffId,
+          deliveryStaffId: data.deliveryStaffId,
+          territory: data.territory,
+          assignedArea: data.assignedArea,
+          assignedZones: data.assignedZones,
+          vehicleNumber: data.vehicleNumber,
+          vehicleType: data.vehicleType,
+          monthlyTarget: data.monthlyTarget,
+          commissionRate: data.commissionRate,
+          createdBy: data.createdBy,
+          createdByName: data.createdByName
+        };
+      }) as AuthUser[];
+      setStaffUsers(users);
       setIsLoadingStaff(false);
-    }
-  };
+    }, (error) => {
+      console.warn('Error fetching staff users in realtime:', error);
+      setIsLoadingStaff(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const loadAuditHistory = async () => {
     setIsLoadingAudit(true);
@@ -377,10 +356,6 @@ FINAL RECOMMENDATION
       setIsLoadingAudit(false);
     }
   };
-
-  useEffect(() => {
-    loadStaffList();
-  }, []);
 
   useEffect(() => {
     if (activeTab === 'audit_logs') {
@@ -570,7 +545,6 @@ FINAL RECOMMENDATION
           title: 'Staff Account Created',
           message: `Account for ${createForm.name} (${createForm.loginId}) is active and ready for login.`
         });
-        loadStaffList();
       } else {
         setCreateError(res.error || 'Failed to create staff account.');
       }
@@ -690,7 +664,8 @@ FINAL RECOMMENDATION
         },
         activeAdminUser?.uid || 'admin',
         activeAdminUser?.name || 'Administrator',
-        selectedStaff.loginId || selectedStaff.email
+        selectedStaff.loginId || selectedStaff.email,
+        selectedStaff
       );
 
       if (res.success) {
@@ -700,7 +675,6 @@ FINAL RECOMMENDATION
           message: `Updated profile details for ${editForm.name}.`
         });
         setIsEditModalOpen(false);
-        loadStaffList();
       } else {
         setEditError(res.error || 'Failed to update staff profile.');
       }
@@ -817,14 +791,6 @@ FINAL RECOMMENDATION
           >
             <UserPlus className="w-4 h-4" />
             <span>Create Staff</span>
-          </button>
-
-          <button
-            onClick={loadStaffList}
-            className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 cursor-pointer shrink-0"
-            title="Refresh staff list"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoadingStaff ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -1686,7 +1652,7 @@ FINAL RECOMMENDATION
                   <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                     Account Role <span className="text-rose-600">*</span>
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => handleRoleChangeInCreate('sales')}
@@ -2322,7 +2288,7 @@ FINAL RECOMMENDATION
       {isDetailModalOpen && selectedStaff && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-left my-8">
-            <div className="px-6 py-5 bg-[#102A2A] text-white flex items-center justify-between">
+            <div className="px-6 py-5 bg-[#102A2A] text-white flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
               <div className="flex items-center gap-3">
                 <UserAvatar
                   name={selectedStaff.name}

@@ -28,7 +28,8 @@ export const AdminOverview: React.FC = () => {
     setAdminTab, 
     setViewingOrder, 
     setViewingCustomer,
-    formatBDT 
+    formatBDT,
+    companySettings
   } = useApp();
 
   // Operating Expenses KPI
@@ -60,14 +61,14 @@ export const AdminOverview: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#0F766E]">Central Operations HQ</span>
             <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded font-semibold">
-              Dhaka Main Warehouse & Dispatches
+              {companySettings?.address || 'Shailkupa Head Office, Jhenaidah, Bangladesh'}
             </span>
           </div>
           <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 text-[#0F172A]">
             Wholesale Commerce & Distribution Overview
           </h1>
           <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
-            Live monitoring of retail accounts, warehouse inventory stock, fleet dispatches, and BDT receivables.
+            {companySettings?.shortDescription || 'Live monitoring of retail accounts, warehouse inventory stock, fleet dispatches, and BDT receivables.'}
           </p>
         </div>
 
@@ -90,7 +91,6 @@ export const AdminOverview: React.FC = () => {
           subtitle={`${todaysOrders.length} wholesale orders booked`}
           icon={<TrendingUp className="w-4 h-4 text-[#0F766E]" />}
           accentColor="teal"
-          trend={{ value: '18.4%', isPositive: true }}
           onClick={() => setAdminTab('orders')}
         />
 
@@ -136,7 +136,6 @@ export const AdminOverview: React.FC = () => {
           subtitle="Cash & digital receipts"
           icon={<Receipt className="w-4 h-4 text-[#10B981]" />}
           accentColor="emerald"
-          trend={{ value: '12.1%', isPositive: true }}
           onClick={() => setAdminTab('collections')}
         />
 

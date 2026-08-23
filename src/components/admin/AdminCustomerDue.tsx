@@ -7,7 +7,7 @@ import {
   AlertCircle, 
   Search, 
   Phone, 
-  DollarSign, 
+  Banknote, 
   Eye, 
   Clock, 
   CheckCircle2,
@@ -355,7 +355,7 @@ export const AdminCustomerDue: React.FC = () => {
                           onClick={() => openQuickCollect(cust)}
                           className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-[11px] shadow-xs flex items-center gap-1"
                         >
-                          <DollarSign className="w-3.5 h-3.5" />
+                          <Banknote className="w-3.5 h-3.5" />
                           <span>Collect</span>
                         </button>
                         <button

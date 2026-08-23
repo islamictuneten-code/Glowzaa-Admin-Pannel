@@ -7,7 +7,7 @@ import {
   Phone, 
   MapPin, 
   CreditCard, 
-  DollarSign, 
+  Banknote, 
   Calendar, 
   Clock, 
   Receipt,
@@ -216,7 +216,7 @@ export const CustomerDetailModal: React.FC = () => {
               }}
               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs inline-flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <DollarSign className="w-3.5 h-3.5" />
+              <Banknote className="w-3.5 h-3.5" />
               <span>Collect Payment</span>
             </button>
           </div>

@@ -18,7 +18,8 @@ import {
   where, 
   orderBy, 
   limit, 
-  addDoc 
+  addDoc,
+  onSnapshot 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -155,15 +156,13 @@ export async function createStaffAccount(
     const authEmail = resolveLoginIdToEmail(cleanLoginId);
 
     // 3. Create Firebase Authentication account in secondary app instance
-    const secondaryAppName = `StaffAuthCreator_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
-    const secondaryAuth = getAuth(secondaryApp);
-
     let newUid: string;
+    let secondaryApp: any;
+    let secondaryAuth: any;
     try {
       const secondaryAppName = `StaffAuthCreator_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-      const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
-      const secondaryAuth = getAuth(secondaryApp);
+      secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+      secondaryAuth = getAuth(secondaryApp);
 
       try {
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, cleanPassword);
@@ -175,8 +174,7 @@ export async function createStaffAccount(
         if (authErr.code === 'auth/weak-password') {
           return { success: false, error: 'Password is too weak. Please use at least 6 characters.' };
         }
-        console.warn('Auth creation notice, falling back to database-managed staff account:', authErr);
-        newUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        return { success: false, error: authErr.message || 'Failed to create authentication account.' };
       } finally {
         try {
           await secondarySignOut(secondaryAuth);
@@ -185,9 +183,9 @@ export async function createStaffAccount(
           // Ignore cleanup errors
         }
       }
-    } catch (outerAuthErr) {
+    } catch (outerAuthErr: any) {
       console.warn('Secondary app init notice:', outerAuthErr);
-      newUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      return { success: false, error: outerAuthErr.message || 'Failed to initialize authentication service.' };
     }
 
     // 4. Save Staff Profile to Firestore users collection
@@ -230,7 +228,7 @@ export async function createStaffAccount(
 
     // 5. Create Audit Log
     try {
-      await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+      addDoc(collection(db, 'audit_logs'), cleanUndefined({
         action: 'STAFF_ACCOUNT_CREATED',
         targetUserId: newUid,
         targetUserName: cleanName,
@@ -259,16 +257,23 @@ export async function updateStaffProfile(
   updates: UpdateStaffInput,
   adminUser: AuthUser | { uid: string; name?: string } | string,
   adminNameFallback?: string,
-  targetLoginId?: string
+  targetLoginId?: string,
+  existingUser?: Partial<AuthUser>
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const admin = normalizeAdminUser(adminUser, adminNameFallback);
     const userRef = doc(db, 'users', userId);
-    const existingSnap = await getDoc(userRef);
     
-    let existingData: Partial<AuthUser> = {};
-    if (existingSnap.exists()) {
-      existingData = existingSnap.data() as AuthUser;
+    let existingData: Partial<AuthUser> = existingUser || {};
+    if (!existingUser) {
+      try {
+        const existingSnap = await getDoc(userRef);
+        if (existingSnap.exists()) {
+          existingData = existingSnap.data() as AuthUser;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch existing user data:', e);
+      }
     }
 
     const isRoleChanged = updates.role && existingData.role && updates.role !== existingData.role;
@@ -288,7 +293,7 @@ export async function updateStaffProfile(
 
     // Write audit log
     try {
-      await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+      addDoc(collection(db, 'audit_logs'), cleanUndefined({
         action: isRoleChanged ? 'STAFF_ROLE_CHANGED' : 'STAFF_PROFILE_UPDATED',
         targetUserId: userId,
         targetUserLoginId: targetLoginId || existingData.loginId || existingData.email || userId,
@@ -340,7 +345,7 @@ export async function toggleStaffStatus(
     }));
 
     // Write audit log
-    await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+    addDoc(collection(db, 'audit_logs'), cleanUndefined({
       action: newStatus === 'inactive' ? 'STAFF_ACCOUNT_DISABLED' : 'STAFF_ACCOUNT_ENABLED',
       targetUserId: userId,
       targetUserLoginId: targetLoginId || existingData.loginId || existingData.email,
@@ -385,7 +390,7 @@ export async function resetStaffPasswordDirectly(
     const loginId = isUserObj ? (staffUserOrEmail.loginId || staffUserOrEmail.email) : (targetLoginId || email);
 
     // Write audit log indicating password reset
-    await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+    addDoc(collection(db, 'audit_logs'), cleanUndefined({
       action: 'STAFF_PASSWORD_RESET',
       targetUserId,
       targetUserLoginId: loginId,
@@ -422,7 +427,7 @@ export async function sendStaffResetEmail(
   try {
     await sendPasswordResetEmail(auth, email);
 
-    await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+    addDoc(collection(db, 'audit_logs'), cleanUndefined({
       action: 'STAFF_PASSWORD_RESET',
       targetUserId: email,
       targetUserName: staffName,
@@ -461,6 +466,7 @@ export async function fetchStaffUsers(): Promise<AuthUser[]> {
         lastLoginAt: data.lastLoginAt ? (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : undefined) : undefined,
         updatedAt: data.updatedAt ? (typeof data.updatedAt === 'string' ? data.updatedAt : data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined) : undefined,
         avatar: data.avatar || getAvatarInitials(data.name || 'ST'),
+        photoURL: data.photoURL,
         title: data.title,
         department: data.department,
         staffId: data.staffId,
@@ -502,4 +508,45 @@ export async function fetchAuditLogs(limitCount = 50): Promise<AuditLog[]> {
     console.warn('Error fetching audit logs:', error);
     return [];
   }
+}
+
+export function subscribeStaffUsers(callback: (users: AuthUser[]) => void): () => void {
+  const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const users = snap.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        uid: docSnap.id,
+        id: docSnap.id,
+        loginId: data.loginId || data.email?.split('@')[0] || docSnap.id.slice(0, 6),
+        name: data.name || 'Staff Member',
+        email: data.email || '',
+        phone: data.phone || '',
+        role: (data.role as UserRole) || 'sales',
+        status: (data.status as 'active' | 'inactive') || 'active',
+        createdAt: data.createdAt ? (typeof data.createdAt === 'string' ? data.createdAt : data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()) : new Date().toISOString(),
+        lastLoginAt: data.lastLoginAt ? (typeof data.lastLoginAt === 'string' ? data.lastLoginAt : data.lastLoginAt?.toDate ? data.lastLoginAt.toDate().toISOString() : undefined) : undefined,
+        updatedAt: data.updatedAt ? (typeof data.updatedAt === 'string' ? data.updatedAt : data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined) : undefined,
+        avatar: data.avatar || getAvatarInitials(data.name || 'ST'),
+        photoURL: data.photoURL,
+        title: data.title,
+        department: data.department,
+        staffId: data.staffId,
+        salesStaffId: data.salesStaffId,
+        deliveryStaffId: data.deliveryStaffId,
+        territory: data.territory,
+        assignedArea: data.assignedArea,
+        assignedZones: data.assignedZones,
+        vehicleNumber: data.vehicleNumber,
+        vehicleType: data.vehicleType,
+        monthlyTarget: data.monthlyTarget,
+        commissionRate: data.commissionRate,
+        createdBy: data.createdBy,
+        createdByName: data.createdByName
+      };
+    }) as AuthUser[];
+    callback(users);
+  }, (error) => {
+    console.error('Error in subscribeStaffUsers:', error);
+  });
 }

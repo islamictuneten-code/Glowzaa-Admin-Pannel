@@ -19,18 +19,33 @@ import {
 } from 'lucide-react';
 
 export const AdminSettings: React.FC = () => {
-  const { products, customers, orders, purchases, collections, addToast, wipeAllData, resetDemoData } = useApp();
+  const { products, customers, orders, purchases, collections, addToast, wipeAllData, resetDemoData, companySettings, saveCompanySettings } = useApp();
   const { currentUser } = useAuth();
 
-  const [companyName, setCompanyName] = useState('Glowzaa Bangladesh Ltd.');
-  const [tagline, setTagline] = useState('Brand Beauty, Personal Care & Wholesale Distribution');
-  const [phone, setPhone] = useState('+880 9612-456999');
-  const [email, setEmail] = useState('wholesale@glowzaa.com');
-  const [address, setAddress] = useState('Shailkupa Head Office, Jhenaidah, Bangladesh');
-  const [tradeLicense, setTradeLicense] = useState('TRAD/DNCC/092148/2024');
-  const [binNumber, setBinNumber] = useState('004910294-0101');
-  const [defaultCreditLimit, setDefaultCreditLimit] = useState(100000);
+  const [companyName, setCompanyName] = useState(companySettings?.companyName || 'Glowzaa Bangladesh Ltd.');
+  const [tagline, setTagline] = useState(companySettings?.tagline || 'Brand Beauty, Personal Care & Wholesale Distribution');
+  const [address, setAddress] = useState(companySettings?.address || 'Shailkupa Head Office, Jhenaidah, Bangladesh');
+  const [phone, setPhone] = useState(companySettings?.phone || '+880 9612-456999');
+  const [email, setEmail] = useState(companySettings?.email || 'wholesale@glowzaa.com');
+  const [tradeLicense, setTradeLicense] = useState(companySettings?.tradeLicense || 'TRAD/DNCC/092148/2024');
+  const [binNumber, setBinNumber] = useState(companySettings?.binNumber || '004910294-0101');
+  const [defaultCreditLimit, setDefaultCreditLimit] = useState(companySettings?.defaultCreditLimit || 100000);
   const [defaultPaymentTerms, setDefaultPaymentTerms] = useState(15);
+  const [shortDescription, setShortDescription] = useState(companySettings?.shortDescription || 'Live monitoring of retail accounts, warehouse inventory stock, fleet dispatches, and BDT receivables.');
+  
+  React.useEffect(() => {
+    if (companySettings) {
+      setCompanyName(companySettings.companyName);
+      setTagline(companySettings.tagline);
+      setAddress(companySettings.address);
+      setPhone(companySettings.phone);
+      setEmail(companySettings.email);
+      setTradeLicense(companySettings.tradeLicense);
+      setBinNumber(companySettings.binNumber);
+      setDefaultCreditLimit(companySettings.defaultCreditLimit);
+      setShortDescription(companySettings.shortDescription);
+    }
+  }, [companySettings]);
   
   const [isWiping, setIsWiping] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -44,12 +59,10 @@ export const AdminSettings: React.FC = () => {
   // Robust Admin check
   const isAdmin = !currentUser || currentUser.role === 'admin' || currentUser?.email?.includes('admin') || currentUser?.email === 'rakibseohub@gmail.com';
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    addToast({
-      type: 'success',
-      title: 'Settings Saved',
-      message: 'Glowzaa corporate profile and wholesale parameters updated successfully.'
+    await saveCompanySettings({
+      companyName, tagline, address, phone, email, tradeLicense, binNumber, defaultCreditLimit, shortDescription
     });
   };
 
@@ -250,6 +263,16 @@ export const AdminSettings: React.FC = () => {
               />
             </div>
 
+            <div className="sm:col-span-2">
+              <label className="font-semibold text-slate-700 block mb-1">Dashboard Short Description</label>
+              <textarea
+                value={shortDescription}
+                onChange={e => setShortDescription(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900"
+                rows={2}
+              />
+            </div>
+
             <div>
               <label className="font-semibold text-slate-700 block mb-1">Trade License Number (DNCC)</label>
               <input
@@ -328,7 +351,7 @@ export const AdminSettings: React.FC = () => {
 
           <div className="space-y-4">
             <p className="text-xs text-rose-800 font-medium leading-relaxed">
-              Permanently clear all application data including orders, customers, products, purchases, payments, expenses, delivery records, collections, cash handovers, and other transactional/master records. This action is irreversible. Use with extreme caution.
+              Permanently clear all application data including orders, customers, products, purchases, payments, expenses, delivery records, collections, cash handovers, user accounts (except yourself), and other transactional/master records. This action is irreversible. Use with extreme caution.
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-2">

@@ -40,7 +40,8 @@ import {
   ExpenseStatus,
   PaymentMethodOption,
   PaymentTypeOption,
-  LedgerTransactionType
+  LedgerTransactionType,
+  CompanySettings
 } from '../types';
 
 import { INITIAL_PRODUCTS } from '../data/mockData';
@@ -4927,7 +4928,8 @@ export async function wipeAllApplicationDataInFirestore(currentUser: AuthUser): 
       'deliveryHistory',
       'cash_handovers',
       'expenses',
-      'audit_logs'
+      'audit_logs',
+      'users'
     ];
 
     for (const colName of collectionsToClear) {
@@ -4941,6 +4943,7 @@ export async function wipeAllApplicationDataInFirestore(currentUser: AuthUser): 
       let batch = writeBatch(db);
       let count = 0;
       for (const docSnap of snapshot.docs) {
+        if (colName === 'users' && docSnap.id === currentUser.uid) continue;
         batch.delete(docSnap.ref);
         count++;
         if (count >= 400) {
@@ -4956,7 +4959,7 @@ export async function wipeAllApplicationDataInFirestore(currentUser: AuthUser): 
 
       // Verify empty
       const verifySnap = await getDocs(colRef);
-      if (!verifySnap.empty) {
+      if (colName !== 'users' && !verifySnap.empty) {
         throw new Error(`Collection ${colName} was not fully emptied (remaining: ${verifySnap.size})`);
       }
     }
@@ -5002,6 +5005,28 @@ export async function resetDemoDataInFirestore(currentUser: AuthUser): Promise<{
     console.error('[RESET ERROR]', err);
     return { success: false, error: err.message || 'Failed to reset demo data.' };
   }
+}
+
+export async function saveCompanySettingsToFirestore(settings: CompanySettings): Promise<{ success: boolean; error?: string }> {
+  try {
+    const docRef = doc(db, 'settings', 'company');
+    await setDoc(docRef, { ...settings, updatedAt: new Date().toISOString() });
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving company settings:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export function subscribeCompanySettings(onUpdate: (settings: CompanySettings | null) => void) {
+  const docRef = doc(db, 'settings', 'company');
+  return onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      onUpdate(snap.data() as CompanySettings);
+    } else {
+      onUpdate(null);
+    }
+  });
 }
 
 

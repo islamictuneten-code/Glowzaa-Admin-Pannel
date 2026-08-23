@@ -86,6 +86,7 @@ export type AdminTab =
   | 'sales_reports'
   | 'inventory_reports'
   | 'profit_loss'
+  | 'warehouses'
   | 'settings';
 
 export type SalesTab = 
@@ -432,6 +433,29 @@ export interface CategoryDoc {
   createdBy?: string;
 }
 
+export interface CompanySettings {
+  companyName: string;
+  tagline: string;
+  address: string;
+  phone: string;
+  email: string;
+  tradeLicense: string;
+  binNumber: string;
+  defaultCreditLimit: number;
+  shortDescription: string;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  address: string;
+  contactNumber: string;
+  managerName: string;
+  status: 'active' | 'inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -458,6 +482,7 @@ export interface Product {
   color?: string;
   variant?: string;
   warehouseLocation?: string;
+  warehouseId?: string; // Add this
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
