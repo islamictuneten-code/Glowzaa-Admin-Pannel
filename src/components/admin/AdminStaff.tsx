@@ -1541,18 +1541,17 @@ FINAL RECOMMENDATION
 
       {/* MODAL 1: CREATE STAFF ACCOUNT */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-left my-8">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] sm:rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden sm:my-8">
             
             {/* Header */}
-            <div className="px-6 py-4 bg-[#102A2A] text-white flex items-center justify-between">
+            <div className="px-6 py-4 bg-[#102A2A] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#087F7A] flex items-center justify-center text-white">
                   <UserPlus className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base">Create New Staff Account</h3>
-                  <p className="text-xs text-teal-200/80">Generates Firebase credentials for Sales or Delivery staff</p>
                 </div>
               </div>
               <button 
@@ -1638,7 +1637,8 @@ FINAL RECOMMENDATION
               </div>
             ) : (
               /* Form */
-              <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs">
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
                 
                 {createError && (
                   <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
@@ -1929,7 +1929,7 @@ FINAL RECOMMENDATION
                 )}
 
                 {/* Footer Buttons */}
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-end gap-3 pt-3 pb-6 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={() => setIsCreateModalOpen(false)}
@@ -1957,6 +1957,7 @@ FINAL RECOMMENDATION
                 </div>
 
               </form>
+            </div>
             )}
 
           </div>

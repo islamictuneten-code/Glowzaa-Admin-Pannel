@@ -29,7 +29,8 @@ import {
   ExpenseCategory,
   ExpenseStatus,
   PaymentMethodOption,
-  PaymentTypeOption
+  PaymentTypeOption,
+  CompanySettings
 } from '../types';
 import { 
   INITIAL_COLLECTIONS, 
