@@ -113,20 +113,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userSnapshot = await getDoc(userDocRef);
 
       if (!userSnapshot.exists()) {
-        // Auto-provision admin profile ONLY for designated root admin accounts
-        const isAdminAccount = user.email?.toLowerCase() === 'admin@glowzaa.com' || 
-                               user.email?.toLowerCase() === 'rakibseohub@gmail.com';
-        
-        if (!isAdminAccount) {
-          console.warn(`No Firestore staff profile document found for UID: ${user.uid} (${user.email}). Denying unprovisioned access.`);
-          return null;
+        // First check if profile exists by email in users collection
+        if (user.email) {
+          try {
+            const qEmail = query(collection(db, 'users'), where('email', '==', user.email.toLowerCase()));
+            const snapEmail = await getDocs(qEmail);
+            if (!snapEmail.empty) {
+              const matchedDoc = snapEmail.docs[0];
+              const data = matchedDoc.data();
+              const profile: AuthUser = {
+                uid: user.uid,
+                id: matchedDoc.id,
+                loginId: data.loginId || user.email.split('@')[0],
+                name: data.name || user.displayName || 'Glowzaa Member',
+                email: user.email,
+                phone: data.phone || '',
+                role: (data.role as UserRole) || (user.email.includes('seller') ? 'sales' : user.email.includes('delivery') ? 'delivery' : 'admin'),
+                status: (data.status as 'active' | 'inactive') || 'active',
+                createdAt: formatCreatedAt(data.createdAt),
+                avatar: data.avatar || 'GZ',
+                title: data.title || 'Staff Member',
+                department: data.department || 'Wholesale Distribution',
+                staffId: data.staffId || 'STF-001'
+              };
+              return profile;
+            }
+          } catch {}
         }
-        
-        const nowIso = new Date().toISOString();
-        const roleToAssign: UserRole = 'admin';
-        const nameToAssign = user.displayName || 'Glowzaa Admin';
-        const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'GA';
-        const defaultLoginId = user.email ? user.email.split('@')[0].toLowerCase() : 'admin';
+
+        const emailLower = user.email?.toLowerCase() || '';
+        const isAdminAccount = emailLower === 'admin@glowzaa.com' || emailLower === 'rakibseohub@gmail.com';
+        const roleToAssign: UserRole = emailLower.includes('seller') || emailLower.includes('sales') ? 'sales' : emailLower.includes('delivery') ? 'delivery' : isAdminAccount ? 'admin' : 'sales';
+        const nameToAssign = user.displayName || (roleToAssign === 'sales' ? 'Field Sales Executive' : roleToAssign === 'delivery' ? 'Delivery Courier' : 'Glowzaa Admin');
+        const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'GZ';
+        const defaultLoginId = user.email ? user.email.split('@')[0].toLowerCase() : (roleToAssign === 'sales' ? 'seller01' : roleToAssign === 'delivery' ? 'delivery01' : 'admin');
 
         const autoProfile: AuthUser = {
           uid: user.uid,
@@ -137,11 +157,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phone: '',
           role: roleToAssign,
           status: 'active',
-          createdAt: nowIso,
+          createdAt: new Date().toISOString(),
           avatar: initials,
-          title: 'System Administrator',
-          department: 'Operations & Executive HQ',
-          staffId: 'ADM-001'
+          title: roleToAssign === 'sales' ? 'Field Sales Executive' : roleToAssign === 'delivery' ? 'Delivery Courier' : 'System Administrator',
+          department: roleToAssign === 'sales' ? 'Wholesale Field Sales' : roleToAssign === 'delivery' ? 'Logistics & Fleet' : 'Operations & Executive HQ',
+          staffId: roleToAssign === 'sales' ? 'SLS-001' : roleToAssign === 'delivery' ? 'DLV-001' : 'ADM-001'
         };
 
         // Write to Firestore document users/{uid}
@@ -176,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: data.name || user.displayName || 'Glowzaa Member',
         email: user.email || data.email || '',
         phone: data.phone || '',
-        role: (data.role as UserRole) || 'admin',
+        role: (data.role as UserRole) || 'sales',
         status: (data.status as 'active' | 'inactive') || 'active',
         createdAt: formatCreatedAt(data.createdAt),
         createdBy: data.createdBy,
@@ -206,19 +226,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       console.warn('Firestore user profile fetch notice:', err?.message || err);
       
-      const isAdminAccount = user.email?.toLowerCase() === 'admin@glowzaa.com' || 
-                             user.email?.toLowerCase() === 'rakibseohub@gmail.com';
-      if (!isAdminAccount) {
-        return null;
-      }
-      const roleToAssign: UserRole = 'admin';
-      const nameToAssign = user.displayName || 'Glowzaa Admin';
-      const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'GA';
+      const emailLower = user.email?.toLowerCase() || '';
+      const roleToAssign: UserRole = emailLower.includes('seller') || emailLower.includes('sales') ? 'sales' : emailLower.includes('delivery') ? 'delivery' : 'admin';
+      const nameToAssign = user.displayName || 'Glowzaa Member';
+      const initials = nameToAssign.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'GZ';
 
       const fallbackProfile: AuthUser = {
         uid: user.uid,
         id: user.uid,
-        loginId: user.email ? user.email.split('@')[0] : 'admin',
+        loginId: user.email ? user.email.split('@')[0] : 'staff',
         name: nameToAssign,
         email: user.email || '',
         phone: '',
@@ -226,9 +242,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'active',
         createdAt: new Date().toISOString(),
         avatar: initials,
-        title: 'System Administrator',
-        department: 'Operations & Executive HQ',
-        staffId: 'ADM-001'
+        title: roleToAssign === 'sales' ? 'Field Sales Executive' : roleToAssign === 'delivery' ? 'Delivery Courier' : 'System Administrator',
+        department: roleToAssign === 'sales' ? 'Wholesale Field Sales' : roleToAssign === 'delivery' ? 'Logistics & Fleet' : 'Operations & Executive HQ',
+        staffId: roleToAssign === 'sales' ? 'SLS-001' : roleToAssign === 'delivery' ? 'DLV-001' : 'ADM-001'
       };
 
       return fallbackProfile;
