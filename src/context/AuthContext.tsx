@@ -25,8 +25,7 @@ import {
   serverTimestamp,
   onSnapshot
 } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { auth, db, firebaseConfig } from '../lib/firebase';
 import { AuthUser, UserRole, DeviceSessionInfo } from '../types';
 import { 
   resolveLoginIdToEmail, 
