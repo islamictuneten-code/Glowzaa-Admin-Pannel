@@ -36,9 +36,13 @@ export const db = firestoreInstance;
 // Validate connection on startup per Firebase skill specification
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, '_health', 'connection'));
+    await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error: any) {
-    // Silently ignore benign connection status notices (Database is closing/hidden, offline, not-found, etc.)
+    if(error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    } else {
+      console.warn("Firebase connection test:", error.message);
+    }
   }
 }
 testConnection();
