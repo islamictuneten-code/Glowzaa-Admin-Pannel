@@ -537,10 +537,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try {
                 await deleteApp(secondaryApp);
               } catch {}
-              // If user already exists in auth, try signing in with profileMatch.pendingPassword if present or accept if password matches
-              if (profileMatch.pendingPassword && password === profileMatch.pendingPassword) {
-                // If pendingPassword matches, update Firestore user document or sign in
-                await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
+              // If user already exists in auth, attempt direct sign in on main auth
+              try {
+                const retryCred = await signInWithEmailAndPassword(auth, authEmail, password);
+                if (profileMatch.pendingPassword) {
+                  await updateDoc(doc(db, 'users', matchedUid), { pendingPassword: '' });
+                }
+                setFirebaseUser(retryCred.user);
+                setCurrentUser(profileMatch);
+                setIsLoading(false);
+                return { success: true };
+              } catch (retryMainErr) {
+                // If password does not match auth, update auth password or proceed
               }
             }
           } catch (healInnerErr) {
