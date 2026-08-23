@@ -41,8 +41,8 @@ export const SalesCustomerDue: React.FC = () => {
     return customers.filter(c => 
       c.assignedSalesSellerId === currentSalesUser.id || 
       c.assignedSalesUserId === currentSalesUser.id ||
-      c.assignedSalesUserName?.toLowerCase() === currentSalesUser.name.toLowerCase() ||
-      c.assignedSalesSellerName?.toLowerCase() === currentSalesUser.name.toLowerCase()
+      (c.assignedSalesUserName && currentSalesUser?.name && c.assignedSalesUserName.toLowerCase() === currentSalesUser.name.toLowerCase()) ||
+      (c.assignedSalesSellerName && currentSalesUser?.name && c.assignedSalesSellerName.toLowerCase() === currentSalesUser.name.toLowerCase())
     );
   }, [customers, currentSalesUser]);
 

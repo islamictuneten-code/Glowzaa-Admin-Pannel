@@ -382,7 +382,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser) {
       setRole(currentUser.role);
       if (currentUser.role === 'sales') {
-        const match = salesStaff.find(s => s.id === currentUser.staffId || s.email.toLowerCase() === currentUser.email.toLowerCase());
+        const match = salesStaff.find(s => s.id === currentUser.staffId || (s.email && currentUser.email && s.email.toLowerCase() === currentUser.email.toLowerCase()));
         if (match) {
           setCurrentSalesUser({
             ...match,
@@ -645,7 +645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               pDriver === driver.uid ||
               pCollector === driver.id || 
               pCollector === driver.uid || 
-              pCollector.toLowerCase() === (driver.email || '').toLowerCase() ||
+              (pCollector && driver.email && pCollector.toLowerCase() === driver.email.toLowerCase()) ||
               (driver.id === 'deliv-01' && p.collectedByUserRole === 'delivery');
             
             return isCash && notReconciled && notPendingOrAccepted && notReversed && matchesDriver;
@@ -696,7 +696,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             pDriver === currentDeliveryUser.uid ||
             pCollector === activeDriverId || 
             pCollector === currentDeliveryUser.uid || 
-            pCollector.toLowerCase() === (currentDeliveryUser.email || '').toLowerCase() ||
+            (pCollector && currentDeliveryUser.email && pCollector.toLowerCase() === currentDeliveryUser.email.toLowerCase()) ||
             (activeDriverId === 'deliv-01' && p.collectedByUserRole === 'delivery') ||
             (currentUser?.role === 'delivery' && (pDriver === currentUser.uid || pCollector === currentUser.uid || activeDriverId === 'deliv-01'));
           
@@ -1201,7 +1201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast({ type: 'error', title: 'Access Denied', message: 'Only Administrators can assign delivery staff.' });
       return { success: false, error: 'Unauthorized' };
     }
-    const driver = deliveryStaff.find(d => d.id === deliveryStaffId || (d as any).uid === deliveryStaffId || d.email.toLowerCase() === deliveryStaffId.toLowerCase());
+    const driver = deliveryStaff.find(d => d.id === deliveryStaffId || (d as any).uid === deliveryStaffId || (d.email && deliveryStaffId && d.email.toLowerCase() === deliveryStaffId.toLowerCase()));
     if (!driver) {
       addToast({ type: 'error', title: 'Assignment Failed', message: 'Selected delivery staff not found.' });
       return { success: false, error: 'Delivery staff not found.' };

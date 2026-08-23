@@ -66,9 +66,9 @@ export const AdminPacking: React.FC = () => {
     if (!searchQuery.trim()) return packingOrders;
     const q = searchQuery.toLowerCase().trim();
     return packingOrders.filter(o => 
-      o.orderNumber.toLowerCase().includes(q) ||
-      o.shopName.toLowerCase().includes(q) ||
-      o.ownerName.toLowerCase().includes(q) ||
+      (o.orderNumber || '').toLowerCase().includes(q) ||
+      (o.shopName || '').toLowerCase().includes(q) ||
+      (o.ownerName || '').toLowerCase().includes(q) ||
       (o.deliveryStaffName && o.deliveryStaffName.toLowerCase().includes(q))
     );
   }, [packingOrders, searchQuery]);

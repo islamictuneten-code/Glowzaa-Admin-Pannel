@@ -88,12 +88,12 @@ export const SalesCustomers: React.FC = () => {
       if (!q) return true;
 
       return (
-        c.shopName.toLowerCase().includes(q) ||
-        c.ownerName.toLowerCase().includes(q) ||
-        c.phone.includes(q) ||
+        (c.shopName || '').toLowerCase().includes(q) ||
+        (c.ownerName || '').toLowerCase().includes(q) ||
+        (c.phone || '').includes(q) ||
         (c.alternatePhone && c.alternatePhone.includes(q)) ||
-        c.area.toLowerCase().includes(q) ||
-        c.district.toLowerCase().includes(q) ||
+        (c.area || '').toLowerCase().includes(q) ||
+        (c.district || '').toLowerCase().includes(q) ||
         (c.customerId && c.customerId.toLowerCase().includes(q))
       );
     });

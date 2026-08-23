@@ -17,6 +17,25 @@ export const ALLOWED_IMAGE_TYPES = [
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 /**
+ * Converts Google Drive links or direct image URLs into displayable image URLs.
+ * Extracts Google Drive file IDs and converts them to direct CDN image URLs (lh3.googleusercontent.com/d/FILE_ID).
+ */
+export function parsePhotoUrl(inputUrl: string): string {
+  if (!inputUrl) return '';
+  const trimmed = inputUrl.trim();
+  
+  // Handle Google Drive links (e.g. drive.google.com/file/d/ID/view, drive.google.com/open?id=ID, etc.)
+  if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com')) {
+    const match = trimmed.match(/(?:file\/d\/|id=|d\/)([a-zA-Z0-9_-]{25,})/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  
+  return trimmed;
+}
+
+/**
  * Validates file format and file size
  */
 export function validateImageFile(file: File): ImageValidationResult {

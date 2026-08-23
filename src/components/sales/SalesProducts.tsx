@@ -16,9 +16,9 @@ export const SalesProducts: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(search.toLowerCase()) ||
-                          p.category.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (p.sku || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (p.category || '').toLowerCase().includes(search.toLowerCase());
     const matchesCat = selectedCategory === 'all' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });

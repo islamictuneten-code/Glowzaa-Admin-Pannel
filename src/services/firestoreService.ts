@@ -2538,7 +2538,7 @@ export async function updateDeliveryStatusInFirestore(
             orderData.deliveryStaffId === userUid ||
             orderData.deliveryStaffId === currentUser.id ||
             orderData.deliveryStaffId === staffId ||
-            orderData.deliveryStaffId.toLowerCase() === userEmail
+            (userEmail && orderData.deliveryStaffId.toLowerCase() === userEmail)
           )) ||
           (orderData.deliveryStaffName && userName && orderData.deliveryStaffName.toLowerCase() === userName);
 
@@ -2800,7 +2800,7 @@ export async function submitProofOfDeliveryInFirestore(
             orderData.deliveryStaffId === userUid ||
             orderData.deliveryStaffId === currentUser.id ||
             orderData.deliveryStaffId === staffId ||
-            orderData.deliveryStaffId.toLowerCase() === userEmail
+            (userEmail && orderData.deliveryStaffId.toLowerCase() === userEmail)
           )) ||
           (orderData.deliveryStaffName && userName && orderData.deliveryStaffName.toLowerCase() === userName);
 
@@ -3250,7 +3250,7 @@ export async function recordPaymentInFirestore(
               orderData.deliveryStaffId === userUid ||
               orderData.deliveryStaffId === currentUser.id ||
               orderData.deliveryStaffId === staffId ||
-              orderData.deliveryStaffId.toLowerCase() === userEmail
+              (userEmail && orderData.deliveryStaffId.toLowerCase() === userEmail)
             )) ||
             (orderData.deliveryStaffName && userName && orderData.deliveryStaffName.toLowerCase() === userName);
 
@@ -3991,7 +3991,7 @@ export async function submitPartialDeliveryInFirestore(
             orderData.deliveryStaffId === userUid ||
             orderData.deliveryStaffId === currentUser.id ||
             orderData.deliveryStaffId === staffId ||
-            orderData.deliveryStaffId.toLowerCase() === userEmail
+            (userEmail && orderData.deliveryStaffId.toLowerCase() === userEmail)
           )) ||
           (orderData.deliveryStaffName && userName && orderData.deliveryStaffName.toLowerCase() === userName);
 
@@ -4299,9 +4299,9 @@ export async function submitCashHandoverInFirestore(
         const pCollector = (p.collectedByUserId || '').toString();
         const pDriver = (p.driverId || '').toString();
         const matchesDriver = pDriver === driverId ||
-          pDriver.toLowerCase() === driverId.toLowerCase() ||
+          (driverId && pDriver.toLowerCase() === driverId.toLowerCase()) ||
           pCollector === driverId || 
-          pCollector.toLowerCase() === driverId.toLowerCase() ||
+          (driverId && pCollector.toLowerCase() === driverId.toLowerCase()) ||
           (currentUser.role === 'delivery' && (driverId === 'deliv-01' || driverId === currentUser.uid || pCollector === currentUser.uid || pDriver === currentUser.uid));
 
         if (

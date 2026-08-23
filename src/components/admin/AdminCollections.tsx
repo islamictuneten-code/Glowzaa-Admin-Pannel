@@ -42,9 +42,9 @@ export const AdminCollections: React.FC = () => {
   const totalPendingHandoverAmount = pendingHandovers.reduce((sum, h) => sum + h.amount, 0);
 
   const filteredCollections = collections.filter(c => {
-    const matchesSearch = c.collectionNumber.toLowerCase().includes(search.toLowerCase()) ||
-                          c.shopName.toLowerCase().includes(search.toLowerCase()) ||
-                          c.collectorName.toLowerCase().includes(search.toLowerCase()) ||
+    const matchesSearch = (c.collectionNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (c.shopName || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (c.collectorName || '').toLowerCase().includes(search.toLowerCase()) ||
                           (c.referenceNo && c.referenceNo.toLowerCase().includes(search.toLowerCase()));
     const matchesRole = collectorRoleFilter === 'all' || c.collectedByRole === collectorRoleFilter;
     return matchesSearch && matchesRole;

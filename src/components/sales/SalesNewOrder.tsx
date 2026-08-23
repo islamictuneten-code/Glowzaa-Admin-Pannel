@@ -50,18 +50,18 @@ export const SalesNewOrder: React.FC = () => {
   const [notes, setNotes] = useState('Deliver before 5 PM to shop counter.');
 
   const filteredCustomers = customers.filter(c => 
-    c.shopName.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.ownerName.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.phone.includes(customerSearch) ||
-    c.district.toLowerCase().includes(customerSearch.toLowerCase())
+    (c.shopName || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.ownerName || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.phone || '').includes(customerSearch) ||
+    (c.district || '').toLowerCase().includes(customerSearch.toLowerCase())
   );
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || filteredCustomers[0];
 
   // Available catalog products for order
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(productSearch.toLowerCase());
+    const matchesSearch = (p.name || '').toLowerCase().includes(productSearch.toLowerCase()) ||
+                          (p.sku || '').toLowerCase().includes(productSearch.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
     return matchesSearch && matchesCategory && p.currentStock > 0;
   });

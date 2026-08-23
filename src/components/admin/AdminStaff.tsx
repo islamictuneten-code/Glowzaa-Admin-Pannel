@@ -12,7 +12,7 @@ import {
   resetStaffPasswordDirectly, 
   fetchAuditLogs 
 } from '../../services/staffAuthService';
-import { uploadStaffProfilePhoto, validateImageFile } from '../../services/storageService';
+import { uploadStaffProfilePhoto, validateImageFile, parsePhotoUrl } from '../../services/storageService';
 import { UserAvatar } from '../shared/UserAvatar';
 import { P03_FULL_AUDIT_REPORT_TEXT } from './SystemAuditReport';
 import { 
@@ -51,7 +51,8 @@ import {
   Camera,
   Upload,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Link as LinkIcon
 } from 'lucide-react';
 
 export const AdminStaff: React.FC = () => {
@@ -143,6 +144,7 @@ export const AdminStaff: React.FC = () => {
   // Profile Photo state for Create Form
   const [createPhotoFile, setCreatePhotoFile] = useState<File | null>(null);
   const [createPhotoPreview, setCreatePhotoPreview] = useState<string | null>(null);
+  const [createPhotoUrlInput, setCreatePhotoUrlInput] = useState<string>('');
   const [createPhotoError, setCreatePhotoError] = useState<string | null>(null);
   const createFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -165,6 +167,7 @@ export const AdminStaff: React.FC = () => {
   // Profile Photo state for Edit Form
   const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
   const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+  const [editPhotoUrlInput, setEditPhotoUrlInput] = useState<string>('');
   const [editPhotoError, setEditPhotoError] = useState<string | null>(null);
   const [editPhotoRemoved, setEditPhotoRemoved] = useState<boolean>(false);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -250,7 +253,7 @@ export const AdminStaff: React.FC = () => {
     }
   }, [activeTab]);
 
-  // Photo Upload Handlers for Create
+  // Photo Handlers for Create Form
   const handleCreatePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCreatePhotoError(null);
     const file = e.target.files?.[0];
@@ -264,19 +267,38 @@ export const AdminStaff: React.FC = () => {
     }
 
     setCreatePhotoFile(file);
+    setCreatePhotoUrlInput('');
     const previewUrl = URL.createObjectURL(file);
     setCreatePhotoPreview(previewUrl);
   };
 
+  const handleCreatePhotoUrlChange = (urlVal: string) => {
+    setCreatePhotoUrlInput(urlVal);
+    setCreatePhotoError(null);
+    if (createFileInputRef.current) createFileInputRef.current.value = '';
+    setCreatePhotoFile(null);
+
+    if (!urlVal.trim()) {
+      setCreatePhotoPreview(null);
+      return;
+    }
+
+    const formattedUrl = parsePhotoUrl(urlVal);
+    setCreatePhotoPreview(formattedUrl);
+  };
+
   const handleClearCreatePhoto = () => {
-    if (createPhotoPreview) URL.revokeObjectURL(createPhotoPreview);
+    if (createPhotoPreview && createPhotoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(createPhotoPreview);
+    }
     setCreatePhotoFile(null);
     setCreatePhotoPreview(null);
+    setCreatePhotoUrlInput('');
     setCreatePhotoError(null);
     if (createFileInputRef.current) createFileInputRef.current.value = '';
   };
 
-  // Photo Upload Handlers for Edit
+  // Photo Handlers for Edit Form
   const handleEditPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEditPhotoError(null);
     const file = e.target.files?.[0];
@@ -290,15 +312,35 @@ export const AdminStaff: React.FC = () => {
     }
 
     setEditPhotoFile(file);
+    setEditPhotoUrlInput('');
     setEditPhotoRemoved(false);
     const previewUrl = URL.createObjectURL(file);
     setEditPhotoPreview(previewUrl);
   };
 
+  const handleEditPhotoUrlChange = (urlVal: string) => {
+    setEditPhotoUrlInput(urlVal);
+    setEditPhotoError(null);
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+    setEditPhotoFile(null);
+    setEditPhotoRemoved(false);
+
+    if (!urlVal.trim()) {
+      setEditPhotoPreview(null);
+      return;
+    }
+
+    const formattedUrl = parsePhotoUrl(urlVal);
+    setEditPhotoPreview(formattedUrl);
+  };
+
   const handleRemoveEditPhoto = () => {
-    if (editPhotoPreview) URL.revokeObjectURL(editPhotoPreview);
+    if (editPhotoPreview && editPhotoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(editPhotoPreview);
+    }
     setEditPhotoFile(null);
     setEditPhotoPreview(null);
+    setEditPhotoUrlInput('');
     setEditPhotoError(null);
     setEditPhotoRemoved(true);
     if (editFileInputRef.current) editFileInputRef.current.value = '';
@@ -376,6 +418,14 @@ export const AdminStaff: React.FC = () => {
         ? createForm.assignedZones.split(',').map(z => z.trim()).filter(Boolean)
         : undefined;
 
+      // Determine initial photo URL (Google Drive link, external URL, or preview base64 if present)
+      let initialPhotoUrl: string | undefined = undefined;
+      if (createPhotoUrlInput.trim()) {
+        initialPhotoUrl = parsePhotoUrl(createPhotoUrlInput);
+      } else if (createPhotoPreview && (createPhotoPreview.startsWith('http') || createPhotoPreview.startsWith('data:'))) {
+        initialPhotoUrl = createPhotoPreview;
+      }
+
       const res = await createStaffAccount(
         {
           name: createForm.name.trim(),
@@ -387,6 +437,7 @@ export const AdminStaff: React.FC = () => {
           title: createForm.title.trim(),
           department: createForm.department.trim(),
           staffId: createForm.staffId.trim(),
+          photoURL: initialPhotoUrl,
           territory: createForm.role === 'sales' ? createForm.territory.trim() : undefined,
           monthlyTarget: createForm.role === 'sales' ? Number(createForm.monthlyTarget) : undefined,
           commissionRate: createForm.role === 'sales' ? Number(createForm.commissionRate) : undefined,
@@ -399,27 +450,26 @@ export const AdminStaff: React.FC = () => {
       );
 
       if (res.success && res.user) {
-        // If photo was selected, upload to Firebase Storage and attach download URL to Firestore profile
-        if (createPhotoFile) {
-          try {
-            const uploadRes = await uploadStaffProfilePhoto(
-              createPhotoFile, 
-              res.user.uid, 
-              activeAdminUser?.uid || 'admin'
-            );
+        // If file photo was selected, background-upload to Firebase Storage without stalling user experience
+        if (createPhotoFile && res.user.uid) {
+          uploadStaffProfilePhoto(
+            createPhotoFile, 
+            res.user.uid, 
+            activeAdminUser?.uid || 'admin'
+          ).then(uploadRes => {
             const photoUrl = uploadRes.downloadURL || uploadRes.downloadUrl;
             if (uploadRes.success && photoUrl) {
-              await updateStaffProfile(
+              updateStaffProfile(
                 res.user.uid,
                 { photoURL: photoUrl },
                 activeAdminUser?.uid || 'admin',
                 activeAdminUser?.name || 'Administrator',
                 createForm.loginId.trim()
-              );
+              ).catch(err => console.warn('Async photo URL sync notice:', err));
             }
-          } catch (uploadErr) {
-            console.error('Failed to upload profile photo:', uploadErr);
-          }
+          }).catch(uploadErr => {
+            console.warn('Async photo upload notice:', uploadErr);
+          });
         }
 
         setShowCreatedCredentials({
@@ -477,7 +527,8 @@ export const AdminStaff: React.FC = () => {
   const handleOpenEditModal = (staff: AuthUser) => {
     setSelectedStaff(staff);
     setEditPhotoFile(null);
-    setEditPhotoPreview(null);
+    setEditPhotoPreview(staff.photoURL || null);
+    setEditPhotoUrlInput(staff.photoURL || '');
     setEditPhotoError(null);
     setEditPhotoRemoved(false);
     if (editFileInputRef.current) editFileInputRef.current.value = '';
@@ -513,8 +564,9 @@ export const AdminStaff: React.FC = () => {
     try {
       let updatedPhotoURL: string | undefined = undefined;
 
-      // 1. If new photo was selected, compress & upload to Firebase Storage
-      if (editPhotoFile) {
+      if (editPhotoUrlInput.trim()) {
+        updatedPhotoURL = parsePhotoUrl(editPhotoUrlInput);
+      } else if (editPhotoFile) {
         const uploadRes = await uploadStaffProfilePhoto(
           editPhotoFile,
           selectedStaff.uid,
@@ -523,6 +575,8 @@ export const AdminStaff: React.FC = () => {
         const photoUrl = uploadRes.downloadURL || uploadRes.downloadUrl;
         if (uploadRes.success && photoUrl) {
           updatedPhotoURL = photoUrl;
+        } else if (editPhotoPreview) {
+          updatedPhotoURL = editPhotoPreview;
         } else {
           setEditError(uploadRes.error || 'Failed to upload profile photo to storage.');
           return;
@@ -1584,18 +1638,26 @@ export const AdminStaff: React.FC = () => {
                 </div>
 
                 {/* Profile Photo Upload Field */}
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                  <label className="block font-bold uppercase tracking-wider text-slate-700 text-[11px]">
-                    Profile Photo (Optional)
-                  </label>
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold uppercase tracking-wider text-slate-700 text-[11px]">
+                      Profile Photo (Optional)
+                    </label>
+                    <span className="text-[10px] text-[#087F7A] bg-teal-50 px-2 py-0.5 rounded-md font-semibold border border-teal-200">
+                      File Upload or Google Drive Link
+                    </span>
+                  </div>
                   
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
+                  <div className="flex items-start gap-3.5">
+                    <div className="relative shrink-0">
                       {createPhotoPreview ? (
                         <img 
                           src={createPhotoPreview} 
                           alt="Preview" 
-                          className="w-14 h-14 rounded-xl object-cover border-2 border-[#087F7A] shadow-xs"
+                          className="w-14 h-14 rounded-xl object-cover border-2 border-[#087F7A] shadow-xs bg-white"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
                         />
                       ) : (
                         <div className="w-14 h-14 rounded-xl bg-slate-200 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
@@ -1605,27 +1667,41 @@ export const AdminStaff: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex-1 space-y-1.5">
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 space-y-2 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={() => createFileInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                          className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
                         >
                           <Upload className="w-3.5 h-3.5 text-[#087F7A]" />
-                          <span>{createPhotoPreview ? 'Change Photo' : 'Upload Photo'}</span>
+                          <span>{createPhotoFile ? 'Change File' : 'Upload File'}</span>
                         </button>
 
-                        {createPhotoPreview && (
+                        {(createPhotoPreview || createPhotoUrlInput) && (
                           <button
                             type="button"
                             onClick={handleClearCreatePhoto}
-                            className="px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>Remove</span>
                           </button>
                         )}
+                      </div>
+
+                      {/* Google Drive Link / Web Image URL Input */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                          <LinkIcon className="w-3.5 h-3.5 text-[#087F7A]" />
+                        </div>
+                        <input
+                          type="url"
+                          value={createPhotoUrlInput}
+                          onChange={(e) => handleCreatePhotoUrlChange(e.target.value)}
+                          placeholder="Or paste Google Drive Link / Image URL..."
+                          className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#087F7A] focus:ring-1 focus:ring-[#087F7A] rounded-lg text-xs text-slate-800 placeholder:text-slate-400 shadow-2xs"
+                        />
                       </div>
 
                       <input
@@ -1636,8 +1712,8 @@ export const AdminStaff: React.FC = () => {
                         className="hidden"
                       />
 
-                      <p className="text-[10px] text-slate-400 leading-tight">
-                        Supported: JPG, PNG, WebP (Max 5MB). Automatically compressed and stored in Firebase Storage.
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Choose local image file OR paste any Google Drive link (<span className="font-mono text-teal-800">https://drive.google.com/file/d/...</span>).
                       </p>
 
                       {createPhotoError && (
@@ -1875,24 +1951,35 @@ export const AdminStaff: React.FC = () => {
               )}
 
               {/* Profile Photo Edit Field */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <label className="block font-bold uppercase tracking-wider text-slate-700 text-[11px]">
-                  Profile Photo
-                </label>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold uppercase tracking-wider text-slate-700 text-[11px]">
+                    Profile Photo
+                  </label>
+                  <span className="text-[10px] text-[#087F7A] bg-teal-50 px-2 py-0.5 rounded-md font-semibold border border-teal-200">
+                    File Upload or Google Drive Link
+                  </span>
+                </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="relative">
+                <div className="flex items-start gap-3.5">
+                  <div className="relative shrink-0">
                     {editPhotoPreview ? (
                       <img 
                         src={editPhotoPreview} 
                         alt="New Preview" 
-                        className="w-14 h-14 rounded-xl object-cover border-2 border-[#087F7A] shadow-xs"
+                        className="w-14 h-14 rounded-xl object-cover border-2 border-[#087F7A] shadow-xs bg-white"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
                       />
                     ) : !editPhotoRemoved && selectedStaff.photoURL ? (
                       <img 
                         src={selectedStaff.photoURL} 
                         alt={selectedStaff.name} 
-                        className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-xs"
+                        className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-xs bg-white"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
                       />
                     ) : (
                       <div className="w-14 h-14 rounded-xl bg-slate-200 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
@@ -1902,27 +1989,41 @@ export const AdminStaff: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-2 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
                         onClick={() => editFileInputRef.current?.click()}
-                        className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
                       >
                         <Upload className="w-3.5 h-3.5 text-[#087F7A]" />
-                        <span>{editPhotoPreview || (!editPhotoRemoved && selectedStaff.photoURL) ? 'Change Photo' : 'Upload Photo'}</span>
+                        <span>{editPhotoFile ? 'Change File' : 'Upload File'}</span>
                       </button>
 
-                      {(editPhotoPreview || (!editPhotoRemoved && selectedStaff.photoURL)) && (
+                      {(editPhotoPreview || editPhotoUrlInput || (!editPhotoRemoved && selectedStaff.photoURL)) && (
                         <button
                           type="button"
                           onClick={handleRemoveEditPhoto}
-                          className="px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Remove Photo</span>
                         </button>
                       )}
+                    </div>
+
+                    {/* Google Drive Link / Web Image URL Input */}
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                        <LinkIcon className="w-3.5 h-3.5 text-[#087F7A]" />
+                      </div>
+                      <input
+                        type="url"
+                        value={editPhotoUrlInput}
+                        onChange={(e) => handleEditPhotoUrlChange(e.target.value)}
+                        placeholder="Or paste Google Drive Link / Image URL..."
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#087F7A] focus:ring-1 focus:ring-[#087F7A] rounded-lg text-xs text-slate-800 placeholder:text-slate-400 shadow-2xs"
+                      />
                     </div>
 
                     <input
@@ -1933,8 +2034,8 @@ export const AdminStaff: React.FC = () => {
                       className="hidden"
                     />
 
-                    <p className="text-[10px] text-slate-400 leading-tight">
-                      Supported: JPG, PNG, WebP (Max 5MB). Automatically compressed and stored in Firebase Storage.
+                    <p className="text-[10px] text-slate-500 leading-tight">
+                      Supported: Local image file or paste Google Drive link (<span className="font-mono text-teal-800">https://drive.google.com/file/d/...</span>).
                     </p>
 
                     {editPhotoError && (
