@@ -37,11 +37,21 @@ export const DeliveryToday: React.FC = () => {
   const [paymentModalOrder, setPaymentModalOrder] = useState<Order | null>(null);
   const [podModalOrder, setPodModalOrder] = useState<Order | null>(null);
 
+  if (!currentDeliveryUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Loading route manifests...</p>
+      </div>
+    );
+  }
+
   const todayRuns = orders.filter(
-    o => (o.deliveryStaffId === currentDeliveryUser.id || 
+    o => (o && currentDeliveryUser && (
+          o.deliveryStaffId === currentDeliveryUser.id || 
           o.deliveryStaffId === currentDeliveryUser.uid || 
-          (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name.toLowerCase())) && 
-         o.orderStatus !== 'cancelled'
+          (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
+    )) && o.orderStatus !== 'cancelled'
   );
 
   const pendingRuns = todayRuns.filter(o => o.deliveryStatus !== 'delivered' && o.deliveryStatus !== 'returned' && o.deliveryStatus !== 'failed');

@@ -26,31 +26,45 @@ export const DeliveryMoneyCollected: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  if (!currentDeliveryUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Accessing cash pouch records...</p>
+      </div>
+    );
+  }
+
   // Driver collections matching current driver
   const myCollections = collections.filter(c => 
-    c.collectorId === currentDeliveryUser.id || 
-    c.collectorId === currentDeliveryUser.uid ||
-    (currentDeliveryUser.id === 'deliv-01' && c.collectedByRole === 'delivery')
+    (c && currentDeliveryUser && (
+      c.collectorId === currentDeliveryUser.id || 
+      c.collectorId === currentDeliveryUser.uid ||
+      (currentDeliveryUser.id === 'deliv-01' && c.collectedByRole === 'delivery')
+    ))
   );
 
   // Active pending handover for this driver
   const pendingHandover = cashHandovers.find(h => 
-    (h.driverId === currentDeliveryUser.id || h.driverId === currentDeliveryUser.uid || currentDeliveryUser.id === 'deliv-01') && 
-    h.status === 'pending'
+    (h && currentDeliveryUser && (
+      h.driverId === currentDeliveryUser.id || h.driverId === currentDeliveryUser.uid || currentDeliveryUser.id === 'deliv-01'
+    )) && h.status === 'pending'
   );
 
   // Financial calculations
-  const myCashInHand = currentDeliveryUser.cashInHand;
+  const myCashInHand = currentDeliveryUser.cashInHand || 0;
 
   const pendingHandoverAmount = pendingHandover ? pendingHandover.amount : 0;
 
   const reconciledAmount = collections
     .filter(c => 
-      (c.collectorId === currentDeliveryUser.id || c.collectorId === currentDeliveryUser.uid || currentDeliveryUser.id === 'deliv-01') && 
+      (c && currentDeliveryUser && (
+        c.collectorId === currentDeliveryUser.id || c.collectorId === currentDeliveryUser.uid || currentDeliveryUser.id === 'deliv-01'
+      )) && 
       c.paymentMethod?.toLowerCase() === 'cash' && 
       c.reconciledWithAdmin
     )
-    .reduce((sum, c) => sum + c.amount, 0);
+    .reduce((sum, c) => sum + (c.amount || 0), 0);
 
   const handleHandoverSubmit = async () => {
     if (myCashInHand <= 0 || pendingHandover) return;

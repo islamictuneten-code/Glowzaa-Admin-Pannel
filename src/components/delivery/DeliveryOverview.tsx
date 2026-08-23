@@ -29,11 +29,22 @@ export const DeliveryOverview: React.FC = () => {
     formatBDT 
   } = useApp();
 
+  if (!currentDeliveryUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Initializing logistics workspace...</p>
+      </div>
+    );
+  }
+
   // Assigned Orders
   const myAssignedOrders = orders.filter(o => 
-    o.deliveryStaffId === currentDeliveryUser.id || 
-    (currentDeliveryUser as any).uid === o.deliveryStaffId ||
-    (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name.toLowerCase())
+    (o && currentDeliveryUser && (
+      o.deliveryStaffId === currentDeliveryUser.id || 
+      (currentDeliveryUser as any).uid === o.deliveryStaffId ||
+      (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
+    ))
   );
   const todayRuns = myAssignedOrders.filter(o => o.orderStatus !== 'cancelled');
   const deliveredOrders = myAssignedOrders.filter(o => o.deliveryStatus === 'delivered');

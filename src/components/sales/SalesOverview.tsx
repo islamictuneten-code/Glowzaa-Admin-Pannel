@@ -30,8 +30,17 @@ export const SalesOverview: React.FC = () => {
     formatBDT 
   } = useApp();
 
+  if (!currentSalesUser) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Initializing sales dashboard...</p>
+      </div>
+    );
+  }
+
   // My Orders
-  const myOrders = orders.filter(o => o.salesSellerId === currentSalesUser.id);
+  const myOrders = orders.filter(o => o && currentSalesUser && o.salesSellerId === currentSalesUser.id);
   const myTodayOrders = myOrders.filter(o => o.createdDate.includes('2026-08-18') || o.createdDate.includes('Today'));
   const myPendingOrders = myOrders.filter(o => o.orderStatus === 'pending' || o.orderStatus === 'processing');
   
