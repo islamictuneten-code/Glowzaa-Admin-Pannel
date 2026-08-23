@@ -575,10 +575,10 @@ export const AdminStaff: React.FC = () => {
   // Handle Reset Password Modal
   const handleOpenResetModal = (staff: AuthUser) => {
     setSelectedStaff(staff);
-    setNewPassword('Glowzaa@' + Math.floor(1000 + Math.random() * 9000));
+    setNewPassword('');
     setResetSuccessMessage(null);
     setResetError(null);
-    setShowPasswordText(true);
+    setShowPasswordText(false);
     setIsResetModalOpen(true);
   };
 
