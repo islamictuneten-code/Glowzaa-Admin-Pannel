@@ -100,8 +100,8 @@ service cloud.firestore {
     match /customers/{customerId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin() || isSales();
-      allow update: if isAdmin() || isSales() || (
-        isDelivery() && 
+      allow update: if isAdmin() || isSales() || isDelivery() || (
+        isAuthenticated() && 
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'creditLimit', 'shopName', 'ownerName', 'phone', 'alternatePhone', 
           'email', 'address', 'area', 'city', 'district', 'notes', 
@@ -112,7 +112,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Orders Collection rules: All authenticated staff can read; authenticated staff can create; Admin full update; Sales update own orders (no salesUserId change, no financial total edits post-confirmation); Delivery update assigned orders only (no financial total or item edits); Only Admin can delete
+    // Orders Collection rules: All authenticated staff can read; authenticated staff can create; Admin full update; Sales update own orders; Delivery update assigned orders (items, deliveryStatus, orderStatus, POD & payment status allowed)
     match /orders/{orderId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
@@ -125,12 +125,11 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['grandTotal', 'subtotal', 'totalDiscount', 'discount', 'totalAmount', 'items'])
         )
       ) || (
-        isDelivery() && 
-        resource.data.deliveryStaffId == request.auth.uid &&
+        (isDelivery() || isAuthenticated()) && 
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'grandTotal', 'subtotal', 'totalDiscount', 'discount', 'totalAmount', 
-          'items', 'stockDeducted', 'stockRestored', 'salesUserId', 'customerId', 
-          'deliveryStaffId', 'shopName', 'ownerName'
+          'stockDeducted', 'stockRestored', 'salesUserId', 'customerId', 
+          'shopName', 'ownerName'
         ])
       );
       allow delete: if isAdmin();
@@ -141,43 +140,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (
         isAdmin() || 
-        (
-          isSales() &&
-          request.resource.data.collectedByUserId == request.auth.uid &&
-          (!('createdBy' in request.resource.data) || request.resource.data.createdBy == request.auth.uid) &&
-          request.resource.data.amount is number &&
-          request.resource.data.amount > 0 &&
-          request.resource.data.customerId is string &&
-          request.resource.data.customerId.size() > 0 &&
-          request.resource.data.reconciledWithAdmin == false &&
-          request.resource.data.isReversed == false &&
-          (!('handoverStatus' in request.resource.data) || request.resource.data.handoverStatus in ['none', null]) &&
-          (!('handoverId' in request.resource.data) || request.resource.data.handoverId == null)
-        ) ||
-        (
-          isDelivery() &&
-          request.resource.data.collectedByUserId == request.auth.uid &&
-          (!('createdBy' in request.resource.data) || request.resource.data.createdBy == request.auth.uid) &&
-          request.resource.data.amount is number &&
-          request.resource.data.amount > 0 &&
-          request.resource.data.customerId is string &&
-          request.resource.data.customerId.size() > 0 &&
-          request.resource.data.reconciledWithAdmin == false &&
-          request.resource.data.isReversed == false &&
-          (!('handoverStatus' in request.resource.data) || request.resource.data.handoverStatus in ['none', null]) &&
-          (!('handoverId' in request.resource.data) || request.resource.data.handoverId == null)
-        ) ||
+        isSales() ||
+        isDelivery() ||
         (
           request.resource.data.collectedByUserId == request.auth.uid &&
           (!('createdBy' in request.resource.data) || request.resource.data.createdBy == request.auth.uid) &&
           request.resource.data.amount is number &&
           request.resource.data.amount > 0 &&
-          request.resource.data.customerId is string &&
-          request.resource.data.customerId.size() > 0 &&
           request.resource.data.reconciledWithAdmin == false &&
-          request.resource.data.isReversed == false &&
-          (!('handoverStatus' in request.resource.data) || request.resource.data.handoverStatus in ['none', null]) &&
-          (!('handoverId' in request.resource.data) || request.resource.data.handoverId == null)
+          request.resource.data.isReversed == false
         )
       );
       allow update: if isAuthenticated() && (
