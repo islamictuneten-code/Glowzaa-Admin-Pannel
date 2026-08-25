@@ -140,9 +140,9 @@ export const AdminFieldTrackingView: React.FC = () => {
 
     const diffMinutes = Math.max(0, Math.floor((nowMs - updateMs) / 60000));
 
-    if (diffMinutes <= 10) {
+    if (diffMinutes <= 15) {
       return { status: 'live' as const, minutesAgo: diffMinutes, label: 'Live on Field' };
-    } else if (diffMinutes <= 20) {
+    } else if (diffMinutes <= 30) {
       return { status: 'stale' as const, minutesAgo: diffMinutes, label: 'Location Stale' };
     } else {
       return { status: 'offline' as const, minutesAgo: diffMinutes, label: 'GPS Inactive / Offline' };
