@@ -13,6 +13,7 @@ import {
 import { 
   startWatchingLocation, 
   stopWatchingLocation, 
+  requestCurrentLocation,
   evaluateGpsQuality, 
   getDeviceBatteryInfo, 
   shouldSendGpsPing, 
@@ -65,35 +66,6 @@ export const FieldDutyCard: React.FC = () => {
 
   const cumulativeDistanceKmRef = useRef<number>(0);
   const watchIdRef = useRef<number | null>(null);
-
-  // Online/Offline Listener
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // Update device battery status periodically
-  useEffect(() => {
-    let isMounted = true;
-    const updateBattery = async () => {
-      const bat = await getDeviceBatteryInfo();
-      if (isMounted) {
-        setBatteryState({ level: bat.batteryLevel, charging: bat.isCharging });
-      }
-    };
-    updateBattery();
-    const interval = setInterval(updateBattery, 60000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, []);
 
   // Process GPS location for automatic pings and geofence visit detection
   const handleLocationUpdate = useCallback(async (pos: GeolocationPosition, session: FieldDutySession, forced = false) => {
@@ -200,6 +172,65 @@ export const FieldDutyCard: React.FC = () => {
       }
     }
   }, [currentUser, isOnline, batteryState, customers, addToast]);
+
+  const handleLocationUpdateRef = useRef(handleLocationUpdate);
+  useEffect(() => {
+    handleLocationUpdateRef.current = handleLocationUpdate;
+  }, [handleLocationUpdate]);
+
+  // Online/Offline Listener & Visibility / Reconnection GPS Refresh
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      if (activeSession && activeSession.status === 'active') {
+        try {
+          const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
+          await handleLocationUpdateRef.current(pos, activeSession, true);
+        } catch (err) {
+          console.warn('Online sync GPS refresh failed:', err);
+        }
+      }
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && activeSession && activeSession.status === 'active') {
+        try {
+          const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
+          await handleLocationUpdateRef.current(pos, activeSession, true);
+        } catch (err) {
+          console.warn('Visibility resume GPS refresh failed:', err);
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeSession]);
+
+  // Update device battery status periodically
+  useEffect(() => {
+    let isMounted = true;
+    const updateBattery = async () => {
+      const bat = await getDeviceBatteryInfo();
+      if (isMounted) {
+        setBatteryState({ level: bat.batteryLevel, charging: bat.isCharging });
+      }
+    };
+    updateBattery();
+    const interval = setInterval(updateBattery, 60000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Start continuous watch position
   const beginGpsTracking = useCallback((session: FieldDutySession) => {

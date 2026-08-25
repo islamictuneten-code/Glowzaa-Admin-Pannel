@@ -10,7 +10,8 @@ import {
   getActiveFieldDutySession,
   getOrCreateActiveFieldDutySession,
   endFieldDutySession as apiEndFieldDutySession,
-  writeFieldDutyAuditLog
+  writeFieldDutyAuditLog,
+  createLocationPing
 } from '../services/firestoreService';
 
 export interface LocationGateContextType {
@@ -152,6 +153,14 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       if (res.success && res.session) {
         setActiveSession(res.session);
+        // Immediately log first location ping so Admin sees live status instantly
+        await createLocationPing(currentUser, {
+          sessionId: res.session.sessionId || res.session.id,
+          latitude: lat,
+          longitude: lon,
+          accuracy,
+          networkOnline: typeof navigator !== 'undefined' ? navigator.onLine : true
+        }).catch(err => console.warn('Initial session ping warning:', err));
       }
 
       setIsChecking(false);

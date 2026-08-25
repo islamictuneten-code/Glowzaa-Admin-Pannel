@@ -64,6 +64,7 @@ export const AdminFieldTrackingView: React.FC = () => {
   const [routeSession, setRouteSession] = useState<FieldDutySession | null>(null);
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   // 1. Fetch all registered sales staff accounts
   useEffect(() => {
@@ -126,28 +127,34 @@ export const AdminFieldTrackingView: React.FC = () => {
     }
   };
 
+  // Threshold constants for Live / Stale / Offline status
+  const LIVE_THRESHOLD_MS = 6 * 60 * 1000; // 6 minutes
+  const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+
   // Helper to calculate stale status
   const getStaleInfo = (session: FieldDutySession | undefined) => {
-    if (!session || session.status !== 'active' || !session.lastLocationUpdateAt) {
-      return { status: 'offline' as const, minutesAgo: 999, label: 'Off Duty / Ended' };
+    if (!session || session.status !== 'active') {
+      return { status: 'offline' as const, minutesAgo: 999, label: 'Off Duty' };
+    }
+    if (!session.lastLocationUpdateAt || session.lastLatitude === null || session.lastLatitude === undefined) {
+      return { status: 'offline' as const, minutesAgo: 999, label: 'GPS Error / No Ping' };
     }
 
     const updateMs = new Date(session.lastLocationUpdateAt).getTime();
     const nowMs = Date.now();
     if (isNaN(updateMs)) {
-      return { status: 'offline' as const, minutesAgo: 999, label: 'Offline' };
+      return { status: 'offline' as const, minutesAgo: 999, label: 'GPS Error' };
     }
 
-    const diffMinutes = Math.max(0, Math.floor((nowMs - updateMs) / 60000));
+    const diffMs = nowMs - updateMs;
+    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
 
-    if (diffMinutes <= 15) {
-      return { status: 'live' as const, minutesAgo: diffMinutes, label: 'Live on Field' };
-    } else if (diffMinutes <= 30) {
-      return { status: 'stale' as const, minutesAgo: diffMinutes, label: 'Location Stale' };
-    } else if (session.status === 'active') {
-      return { status: 'stale' as const, minutesAgo: diffMinutes, label: 'On Duty (GPS Lost)' };
+    if (diffMs <= LIVE_THRESHOLD_MS) {
+      return { status: 'live' as const, minutesAgo: diffMinutes, label: 'LIVE' };
+    } else if (diffMs <= STALE_THRESHOLD_MS) {
+      return { status: 'stale' as const, minutesAgo: diffMinutes, label: 'GPS STALE' };
     } else {
-      return { status: 'offline' as const, minutesAgo: diffMinutes, label: 'GPS Inactive / Offline' };
+      return { status: 'offline' as const, minutesAgo: diffMinutes, label: 'DISCONNECTED' };
     }
   };
 
@@ -485,6 +492,52 @@ export const AdminFieldTrackingView: React.FC = () => {
             GPS Traversed
           </span>
         </div>
+      </div>
+
+      {/* Debug Status Panel (Requirement 22) */}
+      <div className="bg-slate-900 text-slate-100 rounded-xl p-3 shadow-md text-xs font-mono space-y-2">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-2 text-teal-400 font-bold">
+            <Radio className="w-4 h-4 animate-pulse" />
+            <span>Telemetry & Live GPS Diagnostic Panel</span>
+          </div>
+          <button
+            onClick={() => setShowDebugPanel(!showDebugPanel)}
+            className="text-slate-400 hover:text-white underline cursor-pointer"
+          >
+            {showDebugPanel ? 'Hide Details' : 'Show Details'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div>
+            <span className="text-slate-400 block text-[10px]">Active Sessions:</span>
+            <span className="text-emerald-400 font-bold">{summaryMetrics.activeStaffCount}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[10px]">Loaded Sessions:</span>
+            <span className="text-white font-bold">{sessions.length}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[10px]">Admin Listener:</span>
+            <span className="text-emerald-400 font-bold">CONNECTED (onSnapshot)</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[10px]">Last Sync:</span>
+            <span className="text-slate-200">{lastSyncTime.toLocaleTimeString()}</span>
+          </div>
+        </div>
+        {showDebugPanel && (
+          <div className="pt-2 border-t border-slate-800 space-y-1 text-[11px] max-h-48 overflow-y-auto">
+            {staffFieldItems.map((item, idx) => (
+              <div key={idx} className="flex flex-wrap items-center justify-between bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
+                <span className="text-teal-300 font-bold">{item.user.name} ({item.user.loginId || item.user.staffId || 'Sales'})</span>
+                <span className="text-slate-300">Duty: <b className={item.session?.status === 'active' ? 'text-emerald-400' : 'text-slate-400'}>{item.session?.status?.toUpperCase() || 'OFF'}</b></span>
+                <span className="text-slate-300">GPS Status: <b className="text-amber-300">{item.staleLabel} ({item.minutesAgo}m ago)</b></span>
+                <span className="text-slate-400 font-mono text-[10px]">Lat/Lon: {item.session?.lastLatitude ? `${item.session.lastLatitude.toFixed(4)}, ${item.session.lastLongitude?.toFixed(4)}` : 'None'}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Filter and View Mode Switcher Bar */}
