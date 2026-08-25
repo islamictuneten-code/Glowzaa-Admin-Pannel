@@ -297,14 +297,26 @@ export const subscribeStaffNotifications = (
       const isSender = data.senderUserId === currentUser.uid;
 
       // Filter relevance for logged in user:
-      // Admin sees all. Non-admin sees notifications targeted to 'all', their role ('role:sales' or recRole==user.role), their specific uid, or sent by them.
-      const isForMe = 
-        currentUser.role === 'admin' ||
-        recId === 'all' ||
+      // Admin sees all. Non-admin sees notifications targeted to 'all', their role ('role:sales' or recRole==user.role), their specific uid/loginId/staffId, or sent by them.
+      const isDirectMatch = 
         recId === currentUser.uid ||
+        (currentUser.id && recId === currentUser.id) ||
+        (currentUser.loginId && recId === currentUser.loginId) ||
+        (currentUser.staffId && recId === currentUser.staffId) ||
+        (currentUser.salesStaffId && recId === currentUser.salesStaffId) ||
+        (currentUser.email && recId === currentUser.email);
+
+      const isRoleMatch = 
         recId === `role:${currentUser.role}` ||
+        recId === currentUser.role ||
         recRole === currentUser.role ||
         recRole === 'all' ||
+        recId === 'all';
+
+      const isForMe = 
+        currentUser.role === 'admin' ||
+        isDirectMatch ||
+        isRoleMatch ||
         isSender;
 
       if (isForMe) {

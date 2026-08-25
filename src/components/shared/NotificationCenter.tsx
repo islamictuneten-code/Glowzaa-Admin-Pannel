@@ -84,18 +84,48 @@ export const NotificationCenter: React.FC = () => {
     };
   }, [isOpen]);
 
+  const isFirstLoadRef = useRef(true);
+  const prevCountRef = useRef(0);
+
   // Subscribe to live notifications from Firestore
   useEffect(() => {
     if (!currentUser) return;
 
     const unsubscribe = subscribeStaffNotifications(currentUser, (list) => {
+      const currentUnreadCount = list.filter(n => !n.isRead).length;
+
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+        prevCountRef.current = currentUnreadCount;
+      } else {
+        if (currentUnreadCount > prevCountRef.current) {
+          // New notification arrived in real-time!
+          const latest = list[0];
+          if (latest && !latest.isRead) {
+            if (soundEnabled) {
+              playNotificationSound(latest.priority);
+            }
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification(latest.title, {
+                  body: latest.message,
+                  icon: '/icon-192.png',
+                  tag: latest.id || latest.notificationId
+                });
+              } catch {}
+            }
+          }
+        }
+        prevCountRef.current = currentUnreadCount;
+      }
+
       setNotifications(list);
     });
 
     return () => {
       unsubscribe();
     };
-  }, [currentUser]);
+  }, [currentUser, soundEnabled]);
 
   // Listen to foreground FCM push messages
   useEffect(() => {
