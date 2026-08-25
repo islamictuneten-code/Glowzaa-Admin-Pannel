@@ -825,3 +825,45 @@ export async function revokeDeviceSessionInFirestore(
     return { success: false, error: err.message || 'Failed to revoke device session.' };
   }
 }
+
+/**
+ * Fetch list of staff users from Firestore users collection
+ */
+export async function fetchStaffUsersFromFirestore(): Promise<AuthUser[]> {
+  try {
+    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    const users: AuthUser[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      users.push({
+        uid: docSnap.id,
+        id: docSnap.id,
+        loginId: data.loginId || data.email?.split('@')[0] || docSnap.id,
+        name: data.name || 'Staff User',
+        email: data.email || '',
+        phone: data.phone || '',
+        role: data.role || 'sales',
+        status: data.status || 'active',
+        staffId: data.staffId,
+        salesStaffId: data.salesStaffId,
+        deliveryStaffId: data.deliveryStaffId,
+        title: data.title,
+        department: data.department,
+        territory: data.territory,
+        assignedArea: data.assignedArea,
+        assignedZones: data.assignedZones || [],
+        vehicleNumber: data.vehicleNumber,
+        vehicleType: data.vehicleType,
+        monthlyTarget: data.monthlyTarget,
+        commissionRate: data.commissionRate,
+        createdAt: data.createdAt || new Date().toISOString()
+      });
+    });
+    return users;
+  } catch (err) {
+    console.error('Error fetching staff users:', err);
+    return [];
+  }
+}
+

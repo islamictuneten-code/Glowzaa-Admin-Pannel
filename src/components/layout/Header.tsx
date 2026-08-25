@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
+import { NotificationCenter } from '../shared/NotificationCenter';
 import { 
   ShieldCheck, 
   TrendingUp, 
@@ -209,52 +210,8 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
             </button>
           )}
 
-          {/* Notifications dropdown trigger */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {(pendingOrdersCount > 0 || lowStockCount > 0) && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#D97706] ring-2 ring-white" />
-              )}
-            </button>
-
-            {showNotifications && (
-              <div 
-                className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95 text-left"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                  <span className="text-xs font-bold uppercase text-slate-800 tracking-wider">Live System Alerts</span>
-                  <span className="text-[11px] text-slate-500 font-semibold cursor-pointer hover:text-slate-800" onClick={() => setShowNotifications(false)}>
-                    Close
-                  </span>
-                </div>
-                <div className="space-y-2.5 mt-2.5 text-xs">
-                  <div className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-100 flex items-start gap-2.5">
-                    <Truck className="w-4 h-4 text-[#087F7A] shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-slate-900 block">{pendingOrdersCount} Active Dispatches</span>
-                      <p className="text-slate-600 text-[11px]">Orders in progress or scheduled with delivery couriers today.</p>
-                    </div>
-                  </div>
-
-                  {lowStockCount > 0 && (
-                    <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-100 flex items-start gap-2.5">
-                      <Package className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-semibold text-slate-900 block">{lowStockCount} Inventory Reorder Alerts</span>
-                        <p className="text-slate-600 text-[11px]">Items reached low stock threshold in warehouse bays.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Real-time Firebase Push Notification Center */}
+          <NotificationCenter />
 
           {/* User Persona Profile Pill / Dropdown */}
           <div className="relative">

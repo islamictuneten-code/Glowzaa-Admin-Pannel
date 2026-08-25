@@ -297,6 +297,52 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ========================================================================
+    // FIREBASE PUSH NOTIFICATION & STAFF COMMUNICATION SYSTEM (STEP 15)
+    // ========================================================================
+
+    // Staff Push Tokens: Admin can read all tokens; Staff can read, register, and update their own device tokens; Admin full control
+    match /staff_push_tokens/{tokenId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && (isAdmin() || request.resource.data.userId == request.auth.uid);
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          resource.data.userId == request.auth.uid && 
+          request.resource.data.userId == resource.data.userId
+        )
+      );
+      allow delete: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
+    }
+
+    // Staff Notifications: All authenticated staff can read notifications targeted to them or broadcast to 'all'; Admin full read/write; Staff can mark notifications as read
+    match /staff_notifications/{notificationId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.recipientUserId == request.auth.uid || 
+        resource.data.recipientUserId == 'all' || 
+        resource.data.recipientUserId == ('role:' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role) ||
+        resource.data.senderUserId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        request.resource.data.senderUserId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          (
+            resource.data.recipientUserId == request.auth.uid || 
+            resource.data.recipientUserId == 'all' || 
+            resource.data.recipientUserId == ('role:' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)
+          ) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'senderUserId', 'senderUserName', 'senderRole', 'recipientUserId', 
+            'title', 'message', 'type', 'priority', 'createdAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
   }
 }
 

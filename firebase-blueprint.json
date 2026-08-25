@@ -459,6 +459,58 @@
         "distanceFromShopMeters": { "type": "number", "description": "Distance from registered shop coordinates in meters" }
       },
       "required": ["id", "visitId", "sessionId", "userId", "userName", "customerId", "shopName", "ownerName", "checkInTime"]
+    },
+    "StaffPushToken": {
+      "title": "StaffPushToken",
+      "description": "FCM Push notification tokens registered per staff device",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "tokenId": { "type": "string", "description": "Token identifier" },
+        "userId": { "type": "string", "description": "Staff User Firebase Auth UID" },
+        "userLoginId": { "type": "string", "description": "Staff login identifier" },
+        "userName": { "type": "string", "description": "Staff display name" },
+        "role": { "type": "string", "description": "Staff role", "enum": ["admin", "sales", "delivery"] },
+        "token": { "type": "string", "description": "FCM Registration Token string" },
+        "deviceType": { "type": "string", "description": "Device category", "enum": ["android", "desktop", "mobile_browser", "unknown"] },
+        "browser": { "type": "string", "description": "Browser and OS description" },
+        "createdAt": { "type": "string", "description": "Token registration ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update ISO timestamp" },
+        "lastSeenAt": { "type": "string", "description": "Last activity timestamp" },
+        "isActive": { "type": "boolean", "description": "Active push token status flag" }
+      },
+      "required": ["id", "userId", "role", "token", "deviceType", "createdAt", "updatedAt", "isActive"]
+    },
+    "StaffNotification": {
+      "title": "StaffNotification",
+      "description": "Staff communication message and FCM push notification payload",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "notificationId": { "type": "string", "description": "Notification identifier" },
+        "recipientUserId": { "type": "string", "description": "Target recipient User UID, 'all', or 'role:sales', 'role:delivery'" },
+        "recipientUserName": { "type": "string", "description": "Target recipient user display name" },
+        "recipientRole": { "type": "string", "description": "Target recipient staff role" },
+        "senderUserId": { "type": "string", "description": "Sender User UID" },
+        "senderUserName": { "type": "string", "description": "Sender user display name" },
+        "senderRole": { "type": "string", "description": "Sender staff role" },
+        "title": { "type": "string", "description": "Notification title" },
+        "message": { "type": "string", "description": "Notification message body" },
+        "type": { "type": "string", "description": "Notification category type", "enum": ["admin_note", "order_instruction", "delivery_instruction", "field_task", "payment_reminder", "announcement", "urgent", "system"] },
+        "priority": { "type": "string", "description": "Notification priority level", "enum": ["normal", "important", "urgent"] },
+        "relatedOrderId": { "type": "string", "description": "Optional associated wholesale Order ID" },
+        "relatedOrderNumber": { "type": "string", "description": "Optional associated Order Number" },
+        "relatedCustomerId": { "type": "string", "description": "Optional associated Customer ID" },
+        "relatedCustomerName": { "type": "string", "description": "Optional associated Customer Name" },
+        "actionUrl": { "type": "string", "description": "Optional web action URL" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" },
+        "sentAt": { "type": "string", "description": "FCM dispatch ISO timestamp" },
+        "deliveredAt": { "type": "string", "description": "Delivery confirmation ISO timestamp" },
+        "readAt": { "type": "string", "description": "Read confirmation ISO timestamp" },
+        "status": { "type": "string", "description": "Status: pending, sent, or failed", "enum": ["pending", "sent", "failed"] },
+        "isRead": { "type": "boolean", "description": "Read status flag" }
+      },
+      "required": ["id", "notificationId", "recipientUserId", "senderUserId", "senderUserName", "title", "message", "type", "priority", "createdAt", "status", "isRead"]
     }
   },
   "firestore": {
@@ -521,6 +573,14 @@
     "/customer_visits/{visitId}": {
       "schema": "CustomerVisit",
       "description": "Retail shop check-in and visit outcome tracking logs"
+    },
+    "/staff_push_tokens/{tokenId}": {
+      "schema": "StaffPushToken",
+      "description": "Registered FCM web push tokens per staff device"
+    },
+    "/staff_notifications/{notificationId}": {
+      "schema": "StaffNotification",
+      "description": "Staff push notifications and direct message records"
     }
   }
 }

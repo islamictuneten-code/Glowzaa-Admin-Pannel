@@ -87,6 +87,7 @@ export type ProductCategory =
 export type AdminTab = 
   | 'dashboard'
   | 'field_tracking'
+  | 'notifications'
   | 'products'
   | 'categories'
   | 'inventory'
@@ -902,6 +903,71 @@ export interface CustomerVisit {
   verificationStatus?: 'verified' | 'rejected' | 'unverified';
   rejectionReason?: string | null;
 }
+
+// ============================================================================
+// STEP 15: PUSH NOTIFICATIONS & STAFF COMMUNICATION TYPES
+// ============================================================================
+
+export interface StaffPushToken {
+  id: string;
+  tokenId?: string;
+  userId: string;
+  userLoginId?: string;
+  userName?: string;
+  role: UserRole | string;
+  token: string;
+  deviceType: 'android' | 'desktop' | 'mobile_browser' | 'unknown';
+  browser: string;
+  userAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string;
+  isActive: boolean;
+}
+
+export type NotificationType =
+  | 'admin_note'
+  | 'order_instruction'
+  | 'delivery_instruction'
+  | 'field_task'
+  | 'payment_reminder'
+  | 'announcement'
+  | 'urgent'
+  | 'system';
+
+export type NotificationPriority = 'normal' | 'important' | 'urgent';
+
+export type NotificationStatus = 'pending' | 'sent' | 'failed';
+
+export interface StaffNotification {
+  id: string;
+  notificationId: string;
+  recipientUserId: string; // 'all' or specific userId or role e.g. 'role:sales', 'role:delivery'
+  recipientUserName?: string;
+  recipientRole: UserRole | 'all' | string;
+  senderUserId: string;
+  senderUserName: string;
+  senderRole: UserRole | string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  relatedOrderId?: string;
+  relatedOrderNumber?: string;
+  relatedCustomerId?: string;
+  relatedCustomerName?: string;
+  actionUrl?: string;
+  createdAt: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  status: NotificationStatus;
+  isRead: boolean;
+  expiresAt?: string;
+  fcmMessageId?: string;
+  deviceCount?: number;
+}
+
 
 
 

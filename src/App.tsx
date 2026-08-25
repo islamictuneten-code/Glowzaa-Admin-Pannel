@@ -35,7 +35,9 @@ import { AdminExpenses } from './components/admin/AdminExpenses';
 import { AdminSettings } from './components/admin/AdminSettings';
 import { AdminWarehouses } from './components/admin/AdminWarehouses';
 import { AdminPayroll } from './components/admin/AdminPayroll';
+import { AdminStaffNotification } from './components/admin/AdminStaffNotification';
 import { MySalaryView } from './components/shared/MySalaryView';
+import { requestNotificationPermissionAndRegisterToken } from './services/notificationService';
 
 // Sales Components
 import { SalesOverview } from './components/sales/SalesOverview';
@@ -79,6 +81,8 @@ const DashboardContent: React.FC = () => {
           return <AdminOverview />;
         case 'field_tracking':
           return <AdminFieldTrackingView />;
+        case 'notifications':
+          return <AdminStaffNotification />;
         case 'products':
           return <AdminProducts />;
         case 'categories':
@@ -193,6 +197,15 @@ const MainAppContent: React.FC = () => {
   const { currentUser } = useAuth();
   const { readiness } = useLocationGate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Auto-register FCM push token when user is logged in
+  React.useEffect(() => {
+    if (currentUser) {
+      requestNotificationPermissionAndRegisterToken(currentUser).catch((err) => {
+        console.warn('Auto FCM push token register notice:', err);
+      });
+    }
+  }, [currentUser?.uid]);
 
   // Mandatory Location Gate enforcement for Sales users ONLY
   if (currentUser && currentUser.role === 'sales' && readiness !== 'ready') {

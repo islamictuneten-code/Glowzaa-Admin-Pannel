@@ -30,7 +30,8 @@ import {
   LogOut,
   ShieldCheck,
   Building2,
-  MapPin
+  MapPin,
+  BellRing
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -77,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const adminNavItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'notifications', label: 'Push Notifications', icon: <BellRing className="w-4 h-4 text-rose-600" /> },
     { id: 'field_tracking', label: 'Field Sales Tracking', icon: <MapPin className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'products', label: 'Products', icon: <Package className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <Layers className="w-4 h-4" /> },
