@@ -187,7 +187,7 @@ const DashboardContent: React.FC = () => {
   };
 
   return (
-    <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl w-full mx-auto overflow-y-auto pb-20 sm:pb-20 lg:pb-8">
+    <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl w-full mx-auto overflow-y-auto overflow-x-hidden pb-20 sm:pb-20 lg:pb-8">
       {renderContent()}
     </main>
   );

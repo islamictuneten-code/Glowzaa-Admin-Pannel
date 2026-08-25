@@ -3,7 +3,7 @@
  * Location & Geolocation Service for Field Sales Tracking (Phase 3)
  */
 
-import { GpsConnectionState } from '../types';
+import { GpsConnectionState, GpsStatusInfo } from '../types';
 
 // ... (keep existing exports)
 

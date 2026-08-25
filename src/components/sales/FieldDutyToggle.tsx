@@ -46,20 +46,17 @@ export const FieldDutyToggle: React.FC = () => {
   if (currentUser?.role !== 'sales') return null;
 
   return (
-    <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded-lg border border-slate-200">
+    <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-lg border border-slate-200">
       <Switch.Root
         checked={isOn}
         onCheckedChange={handleToggle}
-        className="w-10 h-5 bg-slate-300 rounded-full relative data-[state=checked]:bg-teal-600 transition-colors"
+        className="w-8 h-4 bg-slate-300 rounded-full relative data-[state=checked]:bg-teal-600 transition-colors"
       >
-        <Switch.Thumb className="block w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-100 translate-x-0.5 data-[state=checked]:translate-x-[21px]" />
+        <Switch.Thumb className="block w-3 h-3 bg-white rounded-full shadow-sm transition-transform duration-100 translate-x-0.5 data-[state=checked]:translate-x-[17px]" />
       </Switch.Root>
-      <div className="flex flex-col">
-        <p className="text-[10px] font-bold text-slate-700 leading-tight">DUTY</p>
-        <p className={`text-[9px] font-medium leading-tight ${isOn ? 'text-emerald-600' : 'text-slate-500'}`}>
-          {isOn ? 'ACTIVE' : 'OFF'}
-        </p>
-      </div>
+      <p className="text-[10px] font-bold text-slate-700 pr-1">
+        DUTY <span className={isOn ? 'text-emerald-600' : 'text-slate-500'}>{isOn ? 'ON' : 'OFF'}</span>
+      </p>
     </div>
   );
 };

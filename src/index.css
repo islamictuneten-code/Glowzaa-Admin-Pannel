@@ -22,7 +22,17 @@
     --brand-info: #2563EB;
   }
 
-  html, body {
+  html {
+    box-sizing: border-box;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  *, *:before, *:after {
+    box-sizing: inherit;
+  }
+
+  body {
     background-color: var(--brand-background);
     color: var(--brand-text-main);
     font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -31,9 +41,11 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     letter-spacing: -0.015em;
-    overflow-x: hidden;
-    max-width: 100vw;
     width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    max-width: 100%;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -51,10 +63,6 @@
   .font-mono, [data-currency] {
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
-  }
-
-  * {
-    box-sizing: border-box;
   }
 }
 

@@ -95,18 +95,18 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
             {isMobileSidebarOpen ? <X className="w-5 h-5 text-slate-800" /> : <Menu className="w-5 h-5 text-slate-800" />}
           </button>
 
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#087F7A] to-[#16A085] flex items-center justify-center text-white shadow-xs">
-              <Building2 className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-[#087F7A] to-[#16A085] flex items-center justify-center text-white shadow-xs shrink-0">
+              <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-[#102A2A] text-sm sm:text-base tracking-tight">GLOWZAA</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-[#DDF7EE] text-[#087F7A] border border-teal-200 uppercase tracking-wide">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <span className="font-extrabold text-[#102A2A] text-xs sm:text-base tracking-tight truncate">GLOWZAA</span>
+                <span className="hidden sm:inline-block text-[9px] font-bold px-1 py-0 rounded bg-[#DDF7EE] text-[#087F7A] border border-teal-200 uppercase tracking-wide shrink-0">
                   BRAND
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium hidden sm:block">Wholesale Commerce & Distribution</p>
+              <p className="text-[9px] text-slate-400 font-medium hidden sm:block">Wholesale Commerce</p>
             </div>
           </div>
         </div>
@@ -177,7 +177,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
           {/* Quick Context Action based on active role */}
           {role === 'sales' && (
             <div className="flex items-center gap-3">
-              <FieldDutyToggle />
               <button
                 onClick={() => setSalesTab('create_order')}
                 className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#087F7A] text-white hover:bg-[#075E5B] shadow-2xs transition-colors cursor-pointer"
@@ -200,6 +199,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
 
           {/* Real-time Firebase Push Notification Center */}
           <NotificationCenter />
+          
+          {/* Duty Toggle moved here */}
+          {role === 'sales' && <FieldDutyToggle />}
 
           {/* User Persona Profile Pill / Dropdown */}
           <div className="relative">

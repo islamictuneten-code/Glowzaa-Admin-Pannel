@@ -1,3 +1,10 @@
+export interface GpsStatusInfo {
+  state: 'connected' | 'searching' | 'offline' | 'timeout' | 'requesting' | 'excellent' | 'good' | 'weak';
+  label: string;
+  subLabel: string;
+  accuracyMeters: number | null;
+}
+
 export type UserRole = 'admin' | 'sales' | 'delivery';
 
 export interface DeviceSessionInfo {

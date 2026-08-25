@@ -9,6 +9,8 @@ import {
 } from '../services/locationService';
 import { 
   getOrCreateActiveFieldDutySession, 
+  startFieldDutySession,
+  endFieldDutySession as apiEndFieldDutySession,
   writeFieldDutyAuditLog
 } from '../services/firestoreService';
 
@@ -21,6 +23,8 @@ export interface LocationGateContextType {
   isChecking: boolean;
   isLocationLost: boolean;
   activeSession: FieldDutySession | null;
+  createFieldDutySession: (lat: number, lon: number) => Promise<void>;
+  endFieldDutySession: () => Promise<void>;
   checkLocationReadiness: (forceFresh?: boolean) => Promise<boolean>;
   retryLocation: () => Promise<boolean>;
   requestShopLocation: () => Promise<{ latitude: number; longitude: number; accuracy: number; capturedAt: string; capturedByUserId: string } | null>;
@@ -215,6 +219,28 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return checkLocationReadiness(true);
   }, [checkLocationReadiness]);
 
+  const createFieldDutySession = useCallback(async (lat: number, lon: number) => {
+    if (!currentUser) return;
+    try {
+      const res = await startFieldDutySession(currentUser, { latitude: lat, longitude: lon, accuracy: coords?.accuracy || 10 });
+      if (res.success && res.session) {
+        setActiveSession(res.session);
+      }
+    } catch (err) {
+      console.error('Failed to create field duty session:', err);
+    }
+  }, [currentUser, coords]);
+
+  const endFieldDutySession = useCallback(async () => {
+    if (!currentUser || !activeSession) return;
+    try {
+      await apiEndFieldDutySession(currentUser, activeSession.sessionId || activeSession.id);
+      setActiveSession(null);
+    } catch (err) {
+      console.error('Failed to end field duty session:', err);
+    }
+  }, [currentUser, activeSession]);
+
   /**
    * Request verified shop location for customer creation/editing
    */
@@ -331,6 +357,8 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
         isChecking,
         isLocationLost,
         activeSession,
+        createFieldDutySession,
+        endFieldDutySession,
         checkLocationReadiness,
         retryLocation,
         requestShopLocation

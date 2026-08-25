@@ -183,17 +183,13 @@ export const LocationGateScreen: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="space-y-2.5 pt-2">
-          {isChecking ? (
-            <div className="w-full h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center gap-2 text-teal-300 font-semibold text-sm">
-              <RefreshCw className="w-5 h-5 animate-spin" />
-              <span>Automatically Acquiring GPS...</span>
-            </div>
-          ) : (
-            <div className="w-full h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center gap-2 text-slate-300 font-semibold text-sm">
-              <ShieldAlert className="w-5 h-5" />
-              <span>Waiting for Signal...</span>
-            </div>
-          )}
+          <button
+            onClick={handleRetry}
+            className="w-full h-12 rounded-xl bg-[#087F7A] hover:bg-[#075E5B] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#087F7A]/20 transition-all active:scale-[0.98]"
+          >
+            {isChecking ? <RefreshCw className="w-5 h-5 animate-spin" /> : <MapPin className="w-5 h-5" />}
+            <span>{isChecking ? 'Checking Location...' : 'I have enabled GPS, Continue'}</span>
+          </button>
 
           <button
             onClick={handleLogout}
