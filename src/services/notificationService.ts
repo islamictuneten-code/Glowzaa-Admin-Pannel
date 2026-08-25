@@ -215,7 +215,7 @@ export const sendStaffNotificationInFirestore = async (
     const notifDocRef = doc(db, 'staff_notifications', notifId);
     const nowIso = new Date().toISOString();
 
-    const notifRecord: StaffNotification = {
+    const rawNotifRecord: Record<string, any> = {
       id: notifId,
       notificationId: notifId,
       recipientUserId: payload.recipientUserId,
@@ -228,19 +228,27 @@ export const sendStaffNotificationInFirestore = async (
       message: payload.message.trim(),
       type: payload.type,
       priority: payload.priority,
-      relatedOrderId: payload.relatedOrderId || undefined,
-      relatedOrderNumber: payload.relatedOrderNumber || undefined,
-      relatedCustomerId: payload.relatedCustomerId || undefined,
-      relatedCustomerName: payload.relatedCustomerName || undefined,
-      actionUrl: payload.actionUrl || (payload.relatedOrderId ? `/orders/${payload.relatedOrderId}` : undefined),
+      ...(payload.relatedOrderId ? { relatedOrderId: payload.relatedOrderId } : {}),
+      ...(payload.relatedOrderNumber ? { relatedOrderNumber: payload.relatedOrderNumber } : {}),
+      ...(payload.relatedCustomerId ? { relatedCustomerId: payload.relatedCustomerId } : {}),
+      ...(payload.relatedCustomerName ? { relatedCustomerName: payload.relatedCustomerName } : {}),
+      ...(payload.actionUrl ? { actionUrl: payload.actionUrl } : (payload.relatedOrderId ? { actionUrl: `/orders/${payload.relatedOrderId}` } : {})),
       createdAt: nowIso,
       sentAt: nowIso,
       status: 'sent',
       isRead: false
     };
 
+    // Remove any undefined properties to prevent Firestore setDoc error
+    const cleanedNotifRecord: Record<string, any> = {};
+    for (const [key, val] of Object.entries(rawNotifRecord)) {
+      if (val !== undefined) {
+        cleanedNotifRecord[key] = val;
+      }
+    }
+
     await setDoc(notifDocRef, {
-      ...notifRecord,
+      ...cleanedNotifRecord,
       createdAt: serverTimestamp(),
       sentAt: serverTimestamp()
     });

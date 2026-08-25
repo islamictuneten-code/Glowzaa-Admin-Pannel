@@ -254,47 +254,46 @@ export const AdminStaffNotification: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Top Banner Header */}
-      <div className="bg-gradient-to-br from-slate-900 via-rose-950 to-slate-900 rounded-2xl md:rounded-3xl p-4 sm:p-6 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 transform translate-x-8 -translate-y-8 opacity-10 pointer-events-none">
-          <BellRing className="w-48 sm:w-64 h-48 sm:h-64 text-white" />
+    <div className="space-y-5 pb-12">
+      {/* Top Banner Header - Glowzaa Corporate B2B Theme */}
+      <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-2xs relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="relative z-10 min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#0F766E] bg-teal-50 border border-teal-200/80 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-[#0F766E]" />
+              FCM Push Dispatch System
+            </span>
+            <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded font-semibold">
+              Live Field & Warehouse Push
+            </span>
+          </div>
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 leading-tight">
+            Staff Push Notification Command Center
+          </h1>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
+            Dispatch real-time system push notifications to Sales Staff & Delivery Courier mobile panels — even when the app is closed or running in background.
+          </p>
         </div>
 
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-rose-500/20 border border-rose-500/30 rounded-full text-rose-300 text-[11px] sm:text-xs font-semibold mb-2">
-              <Sparkles className="w-3.5 h-3.5 shrink-0" />
-              <span>Firebase Cloud Messaging (FCM) System</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white leading-tight break-words">
-              Staff Push Notification Command Center
-            </h1>
-            <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
-              Dispatch real-time system notifications to Sales Staff & Delivery Courier phone panels — even when the app is closed or in background.
-            </p>
+        <div className="w-full md:w-auto flex items-center justify-between md:justify-end gap-3 bg-teal-50/60 border border-teal-100 p-3 rounded-xl shrink-0">
+          <div className="text-left md:text-right">
+            <p className="text-[11px] font-semibold text-slate-600">Registered FCM Devices</p>
+            <p className="text-lg font-bold text-[#0F766E]">{pushTokens.length} Active Devices</p>
           </div>
-
-          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 bg-white/10 backdrop-blur-md p-3 rounded-xl border border-white/10 shrink-0">
-            <div className="text-left sm:text-right">
-              <p className="text-[11px] sm:text-xs text-slate-300">Registered FCM Devices</p>
-              <p className="text-lg sm:text-xl font-bold text-white">{pushTokens.length} Active</p>
-            </div>
-            <div className="p-2.5 bg-rose-600 rounded-lg shrink-0">
-              <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-            </div>
+          <div className="p-2.5 bg-[#0F766E] rounded-lg shrink-0 text-white shadow-2xs">
+            <Smartphone className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Touch-Friendly Horizontally Scrollable Tabs Bar */}
-      <div className="flex space-x-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-1 scrollbar-none whitespace-nowrap -mx-1 px-1">
+      <div className="flex space-x-2 border-b border-slate-200 overflow-x-auto pb-1 scrollbar-none whitespace-nowrap -mx-1 px-1">
         <button
           onClick={() => setActiveTab('send')}
           className={`shrink-0 pb-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm transition-all border-b-2 flex items-center space-x-2 ${
             activeTab === 'send'
-              ? 'border-rose-600 text-rose-600 dark:text-rose-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'border-[#0F766E] text-[#0F766E] font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Send className="w-4 h-4 shrink-0" />
@@ -305,8 +304,8 @@ export const AdminStaffNotification: React.FC = () => {
           onClick={() => setActiveTab('history')}
           className={`shrink-0 pb-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm transition-all border-b-2 flex items-center space-x-2 ${
             activeTab === 'history'
-              ? 'border-rose-600 text-rose-600 dark:text-rose-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'border-[#0F766E] text-[#0F766E] font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Clock className="w-4 h-4 shrink-0" />
@@ -317,8 +316,8 @@ export const AdminStaffNotification: React.FC = () => {
           onClick={() => setActiveTab('devices')}
           className={`shrink-0 pb-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm transition-all border-b-2 flex items-center space-x-2 ${
             activeTab === 'devices'
-              ? 'border-rose-600 text-rose-600 dark:text-rose-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'border-[#0F766E] text-[#0F766E] font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Smartphone className="w-4 h-4 shrink-0" />
@@ -333,21 +332,21 @@ export const AdminStaffNotification: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
           {/* Main Form */}
           <div className="lg:col-span-8 space-y-6">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200 dark:border-slate-800">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center space-x-2">
-                <BellRing className="w-5 h-5 text-rose-600 shrink-0" />
+            <div className="bg-white rounded-xl p-4 sm:p-6 shadow-2xs border border-slate-200">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4 flex items-center space-x-2">
+                <BellRing className="w-5 h-5 text-[#0F766E] shrink-0" />
                 <span>Create Staff Notification Payload</span>
               </h2>
 
               {/* Alert Messages */}
               {sendSuccessMsg && (
-                <div className="mb-4 p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs sm:text-sm flex items-center space-x-2">
+                <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs sm:text-sm flex items-center space-x-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span>{sendSuccessMsg}</span>
                 </div>
               )}
               {sendErrorMsg && (
-                <div className="mb-4 p-3.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 rounded-xl text-xs sm:text-sm flex items-center space-x-2">
+                <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs sm:text-sm flex items-center space-x-2">
                   <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
                   <span>{sendErrorMsg}</span>
                 </div>
@@ -355,14 +354,14 @@ export const AdminStaffNotification: React.FC = () => {
 
               {/* Quick Template Presets - Horizontally Scrollable on Mobile */}
               <div className="mb-5 sm:mb-6">
-                <label className="block text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                <label className="block text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                   Quick operational presets:
                 </label>
                 <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none whitespace-nowrap -mx-1 px-1">
                   <button
                     type="button"
                     onClick={() => applyPreset('urgent_delivery')}
-                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 rounded-xl border border-rose-200 dark:border-rose-900 transition-all flex items-center space-x-1.5"
+                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl border border-rose-200 transition-all flex items-center space-x-1.5"
                   >
                     <Truck className="w-3.5 h-3.5 shrink-0" />
                     <span>Urgent Delivery</span>
@@ -370,7 +369,7 @@ export const AdminStaffNotification: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => applyPreset('payment_due')}
-                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded-xl border border-amber-200 dark:border-amber-900 transition-all flex items-center space-x-1.5"
+                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl border border-amber-200 transition-all flex items-center space-x-1.5"
                   >
                     <DollarSign className="w-3.5 h-3.5 shrink-0" />
                     <span>Due Remind</span>
@@ -378,7 +377,7 @@ export const AdminStaffNotification: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => applyPreset('route_task')}
-                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 rounded-xl border border-blue-200 dark:border-blue-900 transition-all flex items-center space-x-1.5"
+                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl border border-teal-200 transition-all flex items-center space-x-1.5"
                   >
                     <Send className="w-3.5 h-3.5 shrink-0" />
                     <span>Field Directive</span>
@@ -386,15 +385,15 @@ export const AdminStaffNotification: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => applyPreset('announcement')}
-                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 rounded-xl border border-purple-200 dark:border-purple-900 transition-all flex items-center space-x-1.5"
+                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-200 transition-all flex items-center space-x-1.5"
                   >
-                    <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                    <Megaphone className="w-3.5 h-3.5 shrink-0 text-slate-600" />
                     <span>Broadcast Notice</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset('packing_ready')}
-                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-xl border border-emerald-200 dark:border-emerald-900 transition-all flex items-center space-x-1.5"
+                    className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200 transition-all flex items-center space-x-1.5"
                   >
                     <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
                     <span>Order Ready</span>
@@ -407,13 +406,13 @@ export const AdminStaffNotification: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Recipient Target */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Recipient Audience Target *
                     </label>
                     <select
                       value={recipientTarget}
                       onChange={(e) => setRecipientTarget(e.target.value)}
-                      className="w-full px-3 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-rose-500 text-slate-900 dark:text-white font-medium"
+                      className="w-full px-3 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0F766E] focus:border-[#0F766E] text-slate-900 font-medium"
                     >
                       <option value="all">🌐 Broadcast to All Staff Members</option>
                       <option value="role:sales">💼 Sales Staff Team Only</option>
@@ -430,7 +429,7 @@ export const AdminStaffNotification: React.FC = () => {
 
                   {/* Priority */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Notification Priority *
                     </label>
                     <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
@@ -439,8 +438,8 @@ export const AdminStaffNotification: React.FC = () => {
                         onClick={() => setPriority('normal')}
                         className={`py-2 px-2 sm:px-3 text-xs font-semibold rounded-xl border text-center transition-all ${
                           priority === 'normal'
-                            ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-sm'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                            ? 'bg-[#0F766E] text-white border-[#0F766E] font-bold shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
                         Normal
@@ -450,8 +449,8 @@ export const AdminStaffNotification: React.FC = () => {
                         onClick={() => setPriority('important')}
                         className={`py-2 px-2 sm:px-3 text-xs font-semibold rounded-xl border text-center transition-all ${
                           priority === 'important'
-                            ? 'bg-amber-600 text-white border-amber-600 font-bold shadow-sm'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                            ? 'bg-amber-600 text-white border-amber-600 font-bold shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
                         Important
@@ -461,8 +460,8 @@ export const AdminStaffNotification: React.FC = () => {
                         onClick={() => setPriority('urgent')}
                         className={`py-2 px-2 sm:px-3 text-xs font-semibold rounded-xl border text-center transition-all ${
                           priority === 'urgent'
-                            ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-sm animate-pulse'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                            ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-2xs animate-pulse'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
                         🚨 Urgent
@@ -474,13 +473,13 @@ export const AdminStaffNotification: React.FC = () => {
                 {/* Type & Invoice Link */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Message Category Type
                     </label>
                     <select
                       value={notifType}
                       onChange={(e) => setNotifType(e.target.value as NotificationType)}
-                      className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-rose-500 text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0F766E] focus:border-[#0F766E] text-slate-900 font-medium"
                     >
                       <option value="admin_note">📌 HQ Admin Executive Note</option>
                       <option value="order_instruction">📦 Order Packing / Item Instruction</option>
@@ -493,7 +492,7 @@ export const AdminStaffNotification: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Related Invoice / Order # (Optional)
                     </label>
                     <input
@@ -501,14 +500,14 @@ export const AdminStaffNotification: React.FC = () => {
                       placeholder="e.g. ORD-2026-1001"
                       value={relatedOrderNumber}
                       onChange={(e) => setRelatedOrderNumber(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-rose-500 text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0F766E] focus:border-[#0F766E] text-slate-900 font-medium"
                     />
                   </div>
                 </div>
 
                 {/* Title */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Notification Headline Title *
                   </label>
                   <input
@@ -518,14 +517,14 @@ export const AdminStaffNotification: React.FC = () => {
                     placeholder="e.g. Urgent Delivery Dispatch Assigned"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-rose-500 text-slate-900 dark:text-white font-medium"
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0F766E] focus:border-[#0F766E] text-slate-900 font-semibold"
                   />
                 </div>
 
                 {/* Message Body */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <label className="block text-xs font-semibold text-slate-700">
                       Message Content Body *
                     </label>
                     <span className="text-[11px] text-slate-400">
@@ -539,7 +538,7 @@ export const AdminStaffNotification: React.FC = () => {
                     placeholder="Enter detailed staff instructions..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-rose-500 text-slate-900 dark:text-white leading-relaxed"
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0F766E] focus:border-[#0F766E] text-slate-900 leading-relaxed font-normal"
                   />
                 </div>
 
@@ -548,7 +547,7 @@ export const AdminStaffNotification: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSending || !title.trim() || !message.trim()}
-                    className="w-full sm:w-auto px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-600/30 transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
+                    className="w-full sm:w-auto px-6 py-3 bg-[#0F766E] hover:bg-[#0D655E] text-white font-bold rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     {isSending ? (
                       <>
@@ -569,20 +568,20 @@ export const AdminStaffNotification: React.FC = () => {
 
           {/* Right Column: Live Mobile Notification Mockup */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="bg-slate-900 rounded-3xl p-5 shadow-2xl border-4 border-slate-800 text-white">
+            <div className="bg-slate-900 rounded-2xl p-4 sm:p-5 shadow-lg border border-slate-800 text-white">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
                 <div className="flex items-center space-x-2">
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-xs font-semibold text-slate-300">Android System Panel Preview</span>
                 </div>
-                <Smartphone className="w-4 h-4 text-slate-400" />
+                <Smartphone className="w-4 h-4 text-[#0F766E]" />
               </div>
 
               {/* Mock Notification Card */}
-              <div className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700/80 space-y-2.5 shadow-lg">
+              <div className="bg-slate-800/90 rounded-xl p-4 border border-slate-700/80 space-y-2.5 shadow-md">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className="p-1.5 bg-rose-600 rounded-lg text-white">
+                    <div className="p-1.5 bg-[#0F766E] rounded-lg text-white">
                       <Bell className="w-4 h-4" />
                     </div>
                     <div>
@@ -607,9 +606,9 @@ export const AdminStaffNotification: React.FC = () => {
                 </div>
 
                 {relatedOrderNumber && (
-                  <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-rose-400 font-semibold">
+                  <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-teal-300 font-semibold">
                     <span>Invoice #{relatedOrderNumber}</span>
-                    <span className="text-[10px] bg-rose-950 px-2 py-0.5 rounded text-rose-300">Tap to open</span>
+                    <span className="text-[10px] bg-teal-950 px-2 py-0.5 rounded text-teal-300 border border-teal-800">Tap to open</span>
                   </div>
                 )}
               </div>
@@ -620,26 +619,26 @@ export const AdminStaffNotification: React.FC = () => {
             </div>
 
             {/* FCM Token Health Summary Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 space-y-3">
-              <h3 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center space-x-1.5">
-                <Smartphone className="w-4 h-4 text-rose-600" />
+            <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3 shadow-2xs">
+              <h3 className="text-xs font-bold uppercase text-slate-500 tracking-wider flex items-center space-x-1.5">
+                <Smartphone className="w-4 h-4 text-[#0F766E]" />
                 <span>Device Token Status</span>
               </h3>
 
               <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                  <span className="text-slate-600 dark:text-slate-400">Total Registered Staff Devices</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{pushTokens.length}</span>
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-slate-600 font-medium">Total Registered Staff Devices</span>
+                  <span className="font-bold text-slate-900">{pushTokens.length}</span>
                 </div>
-                <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                  <span className="text-slate-600 dark:text-slate-400">Android Mobiles Connected</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-slate-600 font-medium">Android Mobiles Connected</span>
+                  <span className="font-bold text-emerald-700">
                     {pushTokens.filter(t => t.deviceType === 'android').length}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                  <span className="text-slate-600 dark:text-slate-400">Desktop / Web PWAs</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-slate-600 font-medium">Desktop / Web PWAs</span>
+                  <span className="font-bold text-[#0F766E]">
                     {pushTokens.filter(t => t.deviceType === 'desktop' || t.deviceType === 'mobile_browser').length}
                   </span>
                 </div>
@@ -655,15 +654,15 @@ export const AdminStaffNotification: React.FC = () => {
       {activeTab === 'history' && (
         <div className="space-y-4">
           {/* Filters Bar */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="bg-white rounded-xl p-4 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
             <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search history..."
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-[#0F766E] focus:border-[#0F766E]"
               />
             </div>
 
@@ -671,7 +670,7 @@ export const AdminStaffNotification: React.FC = () => {
               <select
                 value={historyPriorityFilter}
                 onChange={(e) => setHistoryPriorityFilter(e.target.value as any)}
-                className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                className="px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-[#0F766E]"
               >
                 <option value="all">All Priorities</option>
                 <option value="urgent">Urgent</option>
@@ -682,7 +681,7 @@ export const AdminStaffNotification: React.FC = () => {
               <select
                 value={historyTypeFilter}
                 onChange={(e) => setHistoryTypeFilter(e.target.value as any)}
-                className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                className="px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-[#0F766E]"
               >
                 <option value="all">All Categories</option>
                 <option value="admin_note">Admin Note</option>
@@ -699,57 +698,57 @@ export const AdminStaffNotification: React.FC = () => {
           {/* Mobile Card List View (Visible on < md) */}
           <div className="block md:hidden space-y-3">
             {filteredHistory.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 text-center text-slate-400 border border-slate-200 dark:border-slate-800">
-                <Bell className="w-8 h-8 mx-auto mb-2 stroke-1 opacity-40" />
-                <p className="font-medium text-slate-600 dark:text-slate-400 text-xs">No dispatch records found</p>
+              <div className="bg-white rounded-xl p-8 text-center text-slate-400 border border-slate-200 shadow-2xs">
+                <Bell className="w-8 h-8 mx-auto mb-2 stroke-1 opacity-40 text-slate-400" />
+                <p className="font-medium text-slate-600 text-xs">No dispatch records found</p>
               </div>
             ) : (
               filteredHistory.map((h) => (
                 <div
                   key={h.id}
-                  className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs"
+                  className="bg-white rounded-xl p-4 border border-slate-200 space-y-2.5 shadow-2xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap mb-1">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                           h.priority === 'urgent'
-                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
+                            ? 'bg-rose-100 text-rose-700'
                             : h.priority === 'important'
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400'
-                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-teal-50 text-[#0F766E]'
                         }`}>
                           {h.priority}
                         </span>
-                        <span className="text-[10px] text-slate-500 capitalize bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                        <span className="text-[10px] text-slate-600 capitalize bg-slate-100 px-2 py-0.5 rounded font-medium">
                           {h.type.replace('_', ' ')}
                         </span>
                       </div>
-                      <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">{h.title}</h4>
+                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{h.title}</h4>
                     </div>
 
                     <button
                       onClick={() => handleDeleteHistory(h.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors shrink-0"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors shrink-0"
                       title="Delete log"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                     {h.message}
                   </p>
 
                   {h.relatedOrderNumber && (
-                    <div className="inline-block px-2 py-0.5 bg-rose-50 dark:bg-rose-950/60 rounded text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                    <div className="inline-block px-2 py-0.5 bg-teal-50 border border-teal-200 rounded text-[10px] font-semibold text-[#0F766E]">
                       Invoice #{h.relatedOrderNumber}
                     </div>
                   )}
 
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
                     <div>
-                      Target: <strong className="text-slate-700 dark:text-slate-300">{h.recipientUserName || h.recipientUserId}</strong>
+                      Target: <strong className="text-slate-800">{h.recipientUserName || h.recipientUserId}</strong>
                     </div>
                     <div>
                       {h.createdAt ? formatDistanceToNowHelper(new Date(h.createdAt)) : 'N/A'}
@@ -761,10 +760,10 @@ export const AdminStaffNotification: React.FC = () => {
           </div>
 
           {/* Tablet & Desktop Table (Visible on >= md) */}
-          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="hidden md:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-semibold border-b border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                   <tr>
                     <th className="py-3 px-4">Title & Message</th>
                     <th className="py-3 px-4">Target Audience</th>
@@ -774,45 +773,45 @@ export const AdminStaffNotification: React.FC = () => {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-100">
                   {filteredHistory.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-slate-400">
-                        <Bell className="w-8 h-8 mx-auto mb-2 stroke-1 opacity-40" />
-                        <p className="font-medium text-slate-600 dark:text-slate-400">No dispatch records found</p>
+                        <Bell className="w-8 h-8 mx-auto mb-2 stroke-1 opacity-40 text-slate-400" />
+                        <p className="font-medium text-slate-600">No dispatch records found</p>
                       </td>
                     </tr>
                   ) : (
                     filteredHistory.map((h) => (
-                      <tr key={h.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                      <tr key={h.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4">
-                          <p className="font-bold text-slate-900 dark:text-white">{h.title}</p>
-                          <p className="text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">{h.message}</p>
+                          <p className="font-bold text-slate-900">{h.title}</p>
+                          <p className="text-slate-500 line-clamp-1 mt-0.5">{h.message}</p>
                           {h.relatedOrderNumber && (
-                            <span className="mt-1 inline-block text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                            <span className="mt-1 inline-block text-[10px] font-semibold text-[#0F766E]">
                               Order #{h.relatedOrderNumber}
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 font-medium text-slate-900 dark:text-white">
+                        <td className="py-3.5 px-4 font-semibold text-slate-900">
                           {h.recipientUserName || h.recipientUserId}
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex flex-col gap-1">
                             <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase w-max ${
                               h.priority === 'urgent'
-                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
+                                ? 'bg-rose-100 text-rose-700'
                                 : h.priority === 'important'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400'
-                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-teal-50 text-[#0F766E]'
                             }`}>
                               {h.priority}
                             </span>
-                            <span className="text-[10px] text-slate-400 capitalize">{h.type.replace('_', ' ')}</span>
+                            <span className="text-[10px] text-slate-500 capitalize">{h.type.replace('_', ' ')}</span>
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <p className="font-medium text-slate-900 dark:text-white">{h.senderUserName}</p>
+                          <p className="font-semibold text-slate-900">{h.senderUserName}</p>
                           <p className="text-[10px] text-slate-400 capitalize">{h.senderRole}</p>
                         </td>
                         <td className="py-3.5 px-4 text-slate-500">
@@ -821,7 +820,7 @@ export const AdminStaffNotification: React.FC = () => {
                         <td className="py-3.5 px-4 text-right">
                           <button
                             onClick={() => handleDeleteHistory(h.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                             title="Delete log"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -842,56 +841,56 @@ export const AdminStaffNotification: React.FC = () => {
       {/* ======================================================================== */}
       {activeTab === 'devices' && (
         <div className="space-y-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between shadow-2xs">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Active Staff Push Tokens</h3>
+              <h3 className="text-sm font-bold text-slate-900">Active Staff Push Tokens</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Registered Android phones & browsers configured to receive FCM background push alerts.
               </p>
             </div>
-            <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-bold text-xs rounded-full">
+            <span className="px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs rounded-full">
               {pushTokens.length} Devices Online
             </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pushTokens.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-slate-400">
-                <Smartphone className="w-10 h-10 mx-auto mb-2 opacity-40 stroke-1" />
-                <p className="font-medium text-slate-600 dark:text-slate-400">No staff devices registered yet</p>
-                <p className="text-xs mt-1">When staff log in and accept push permissions, their device token will appear here.</p>
+              <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                <Smartphone className="w-10 h-10 mx-auto mb-2 opacity-40 stroke-1 text-slate-400" />
+                <p className="font-medium text-slate-600">No staff devices registered yet</p>
+                <p className="text-xs mt-1 text-slate-400">When staff log in and accept push permissions, their device token will appear here.</p>
               </div>
             ) : (
               pushTokens.map((t) => (
                 <div
                   key={t.id}
-                  className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 space-y-3 shadow-xs"
+                  className="bg-white rounded-xl p-4 border border-slate-200 space-y-3 shadow-2xs"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <div className={`p-2 rounded-xl ${
                         t.deviceType === 'android' 
-                          ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600' 
-                          : 'bg-blue-100 dark:bg-blue-950 text-blue-600'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                          : 'bg-teal-50 text-[#0F766E] border border-teal-200'
                       }`}>
                         {t.deviceType === 'android' ? <Smartphone className="w-5 h-5" /> : <Laptop className="w-5 h-5" />}
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">{t.userName || 'Staff Device'}</h4>
+                        <h4 className="font-bold text-slate-900 text-sm">{t.userName || 'Staff Device'}</h4>
                         <p className="text-xs text-slate-500 capitalize">{t.role} Staff • {t.userLoginId || 'User'}</p>
                       </div>
                     </div>
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" title="Active FCM Token" />
                   </div>
 
-                  <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
                     <div className="flex items-center justify-between">
                       <span>Browser / OS:</span>
-                      <strong className="text-slate-900 dark:text-white">{t.browser}</strong>
+                      <strong className="text-slate-900">{t.browser}</strong>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Device Category:</span>
-                      <span className="capitalize font-semibold text-rose-600 dark:text-rose-400">{t.deviceType}</span>
+                      <span className="capitalize font-semibold text-[#0F766E]">{t.deviceType}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Last Activity:</span>
@@ -900,7 +899,7 @@ export const AdminStaffNotification: React.FC = () => {
                   </div>
 
                   <div className="pt-2">
-                    <p className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 p-2 rounded-lg text-slate-500 dark:text-slate-400 truncate">
+                    <p className="text-[10px] font-mono bg-slate-50 border border-slate-200 p-2 rounded-lg text-slate-500 truncate">
                       Token: {t.token}
                     </p>
                   </div>
