@@ -112,8 +112,8 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const position = await requestCurrentLocation({
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: forceFresh ? 0 : 5000
+        timeout: 20000,
+        maximumAge: forceFresh ? 0 : 30000
       });
 
       const lat = position.coords.latitude;
