@@ -207,10 +207,7 @@ const MainAppContent: React.FC = () => {
     }
   }, [currentUser?.uid]);
 
-  // Mandatory Location Gate enforcement for Sales users ONLY
-  if (currentUser && currentUser.role === 'sales' && readiness !== 'ready') {
-    return <LocationGateScreen />;
-  }
+  // Allow sales users to enter dashboard normally without blocking full-screen gate
 
   return (
     <div className="min-h-screen bg-[#F5F8FA] text-[#102A2A] flex flex-col font-sans antialiased selection:bg-[#087F7A] selection:text-white">

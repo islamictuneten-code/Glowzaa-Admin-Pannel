@@ -1,15 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import { LocationReadiness, FieldDutySession } from '../types';
+import { LocationReadiness, FieldDutySession, GpsConnectionState } from '../types';
 import { 
   getLocationPermissionState, 
   requestCurrentLocation, 
-  startWatchingLocation, 
-  stopWatchingLocation
+  evaluateGpsQuality
 } from '../services/locationService';
 import { 
-  getOrCreateActiveFieldDutySession, 
-  startFieldDutySession,
+  getActiveFieldDutySession,
+  getOrCreateActiveFieldDutySession,
   endFieldDutySession as apiEndFieldDutySession,
   writeFieldDutyAuditLog
 } from '../services/firestoreService';
@@ -23,8 +22,9 @@ export interface LocationGateContextType {
   isChecking: boolean;
   isLocationLost: boolean;
   activeSession: FieldDutySession | null;
-  createFieldDutySession: (lat: number, lon: number) => Promise<void>;
-  endFieldDutySession: () => Promise<void>;
+  gpsStatus: GpsConnectionState;
+  startDuty: () => Promise<boolean>;
+  stopDuty: () => Promise<void>;
   checkLocationReadiness: (forceFresh?: boolean) => Promise<boolean>;
   retryLocation: () => Promise<boolean>;
   requestShopLocation: () => Promise<{ latitude: number; longitude: number; accuracy: number; capturedAt: string; capturedByUserId: string } | null>;
@@ -32,24 +32,18 @@ export interface LocationGateContextType {
 
 const LocationGateContext = createContext<LocationGateContextType | undefined>(undefined);
 
-export const GPS_GATE_MAX_ACCURACY_METERS = 100;
-export const LOCATION_STALE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
 export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
 
-  const [readiness, setReadiness] = useState<LocationReadiness>('checking');
+  const [readiness, setReadiness] = useState<LocationReadiness>('ready');
   const [permissionState, setPermissionState] = useState<PermissionState | 'unsupported'>('prompt');
   const [coords, setCoords] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
   const [lastVerifiedAt, setLastVerifiedAt] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isChecking, setIsChecking] = useState<boolean>(true);
+  const [isChecking, setIsChecking] = useState<boolean>(false);
   const [isLocationLost, setIsLocationLost] = useState<boolean>(false);
   const [activeSession, setActiveSession] = useState<FieldDutySession | null>(null);
-
-  const watchIdRef = useRef<number | null>(null);
-  const prevIsLocationLostRef = useRef<boolean>(false);
-  const auditLoggedStateRef = useRef<{ gatePassed?: boolean }>({});
+  const [gpsStatus, setGpsStatus] = useState<GpsConnectionState>('idle');
 
   // Helper for logging audit events
   const logLocationAuditEvent = useCallback(async (
@@ -76,174 +70,127 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser]);
 
-  /**
-   * Primary Location Gate Readiness Check
-   */
-  const checkLocationReadiness = useCallback(async (forceFresh: boolean = false): Promise<boolean> => {
-    // Non-sales users (admin, delivery) bypass gate completely
-    if (!currentUser || currentUser.role !== 'sales') {
-      setReadiness('ready');
-      setIsChecking(false);
-      setIsLocationLost(false);
-      return true;
-    }
+  // Check initial permission and active session on mount or user change
+  useEffect(() => {
+    let isMounted = true;
+    const initializeLocationState = async () => {
+      if (!currentUser || currentUser.role !== 'sales') {
+        if (isMounted) {
+          setReadiness('ready');
+          setIsChecking(false);
+        }
+        return;
+      }
+
+      try {
+        const perm = await getLocationPermissionState();
+        if (isMounted) setPermissionState(perm);
+
+        const activeSess = await getActiveFieldDutySession(currentUser.uid);
+        if (isMounted && activeSess) {
+          setActiveSession(activeSess);
+          if (activeSess.lastLatitude && activeSess.lastLongitude) {
+            setCoords({
+              latitude: activeSess.lastLatitude,
+              longitude: activeSess.lastLongitude,
+              accuracy: activeSess.gpsAccuracyMeters || 15
+            });
+            const quality = evaluateGpsQuality(activeSess.gpsAccuracyMeters || 15);
+            setGpsStatus(quality.state);
+          }
+        }
+      } catch (err) {
+        console.warn('Error initializing location state:', err);
+      } finally {
+        if (isMounted) setIsChecking(false);
+      }
+    };
+
+    initializeLocationState();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]);
+
+  // Start Field Duty (turns on GPS check and creates session)
+  const startDuty = useCallback(async (): Promise<boolean> => {
+    if (!currentUser || currentUser.role !== 'sales') return false;
 
     setIsChecking(true);
     setErrorMessage(null);
+    setGpsStatus('requesting');
 
-    // 1. Browser Capability Check
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      setReadiness('unsupported');
-      setErrorMessage('Geolocation is not supported by your browser or device.');
-      setIsChecking(false);
-      await logLocationAuditEvent('SALES_GPS_UNAVAILABLE', 'Geolocation API unsupported by browser', 'API_UNSUPPORTED');
-      return false;
-    }
-
-    // 2. Permission Query Check
-    const perm = await getLocationPermissionState();
-    setPermissionState(perm);
-
-    if (perm === 'denied') {
-      setReadiness('permission_denied');
-      setErrorMessage('Location permission is denied. Please enable location permission in browser settings.');
-      setIsChecking(false);
-      await logLocationAuditEvent('SALES_LOCATION_PERMISSION_DENIED', 'Browser permission state is explicitly denied', 'PERMISSION_DENIED');
-      return false;
-    }
-
-    // 3. Obtain Real GPS Coordinates
     try {
-      const position = await requestCurrentLocation({
-        enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: forceFresh ? 0 : 30000
+      const perm = await getLocationPermissionState();
+      setPermissionState(perm);
+
+      if (perm === 'denied') {
+        setReadiness('permission_denied');
+        setErrorMessage('Location permission is blocked. Please allow location access in your browser settings.');
+        setIsChecking(false);
+        await logLocationAuditEvent('SALES_LOCATION_PERMISSION_DENIED', 'Permission denied when starting field duty', 'PERMISSION_DENIED');
+        return false;
+      }
+
+      setGpsStatus('searching');
+      const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 15000 });
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy;
+
+      setCoords({ latitude: lat, longitude: lon, accuracy });
+      setLastVerifiedAt(new Date().toISOString());
+      setReadiness('ready');
+      setGpsStatus(evaluateGpsQuality(accuracy).state);
+
+      // Create or get active field duty session
+      const res = await getOrCreateActiveFieldDutySession(currentUser, {
+        latitude: lat,
+        longitude: lon,
+        accuracy
       });
 
-      const lat = position.coords.latitude;
-      const lon = position.coords.longitude;
-      const accuracy = position.coords.accuracy;
-
-      // Coordinate boundary safety
-      if (typeof lat !== 'number' || lat < -90 || lat > 90 || typeof lon !== 'number' || lon < -180 || lon > 180) {
-        setReadiness('gps_unavailable');
-        setErrorMessage('Invalid GPS coordinates received from device.');
-        setIsChecking(false);
-        await logLocationAuditEvent('SALES_GPS_UNAVAILABLE', 'Invalid coordinate bounds', 'INVALID_COORDINATES');
-        return false;
+      if (res.success && res.session) {
+        setActiveSession(res.session);
       }
 
-      // 4. GPS Accuracy Check (<= 100m threshold)
-      if (accuracy > GPS_GATE_MAX_ACCURACY_METERS) {
-        setReadiness('weak_accuracy');
-        setCoords({ latitude: lat, longitude: lon, accuracy });
-        setErrorMessage(`GPS accuracy is weak (±${Math.round(accuracy)}m). Required is ±${GPS_GATE_MAX_ACCURACY_METERS}m or better. Please move to an open area and try again.`);
-        setIsChecking(false);
-        await logLocationAuditEvent('SALES_GPS_UNAVAILABLE', `GPS accuracy too weak: ±${Math.round(accuracy)}m`, 'WEAK_ACCURACY');
-        return false;
-      }
-
-      // 5. SUCCESS! Gate Passed!
-      const nowIso = new Date().toISOString();
-      setCoords({ latitude: lat, longitude: lon, accuracy });
-      setLastVerifiedAt(nowIso);
-      setReadiness('ready');
-      setIsLocationLost(false);
-      setErrorMessage(null);
-      setPermissionState('granted');
       setIsChecking(false);
-
-      if (!auditLoggedStateRef.current.gatePassed) {
-        auditLoggedStateRef.current.gatePassed = true;
-        await logLocationAuditEvent('SALES_LOCATION_GATE_PASSED', `Location readiness gate passed (Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}, Accuracy: ±${Math.round(accuracy)}m)`);
-      }
-
-      // 6. Automatically start or resume active Field Duty session
-      try {
-        const sessionRes = await getOrCreateActiveFieldDutySession(currentUser, {
-          latitude: lat,
-          longitude: lon,
-          accuracy
-        });
-        if (sessionRes.success && sessionRes.session) {
-          setActiveSession(sessionRes.session);
-        }
-      } catch (sessErr) {
-        console.warn('Field duty session initialization notice:', sessErr);
-      }
-
+      await logLocationAuditEvent('SALES_LOCATION_GATE_PASSED', `Field duty started (Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}, Accuracy: ±${Math.round(accuracy)}m)`);
       return true;
     } catch (err: any) {
-      console.warn('Location readiness check failed:', err);
-      const msg = err.message || 'Unable to access device location.';
-
-      // If we already have valid coordinates in state from background tracking or previous check, preserve ready state
-      if (coords && coords.latitude && coords.longitude && coords.accuracy <= GPS_GATE_MAX_ACCURACY_METERS) {
-        setReadiness('ready');
-        setErrorMessage(null);
-        setPermissionState('granted');
-        setIsLocationLost(false);
-        setIsChecking(false);
-        return true;
-      }
-
-      setCoords(null);
-      if (msg.includes('permission') || msg.includes('Permission')) {
-        setReadiness('permission_denied');
-        setPermissionState('denied');
-        setErrorMessage('Location permission was denied. Please allow location access in your browser settings.');
-        await logLocationAuditEvent('SALES_LOCATION_PERMISSION_DENIED', msg, 'PERMISSION_DENIED');
-      } else {
-        setReadiness('gps_unavailable');
-        setErrorMessage('Device GPS signal is unavailable. Please ensure GPS/Location is turned on in device settings.');
-        await logLocationAuditEvent('SALES_GPS_UNAVAILABLE', msg, 'POSITION_UNAVAILABLE');
-      }
-
+      console.warn('Failed to start field duty location:', err);
+      const msg = err.message || 'Unable to acquire GPS location.';
+      setErrorMessage(msg);
       setIsChecking(false);
+      setGpsStatus('timeout');
       return false;
     }
   }, [currentUser, logLocationAuditEvent]);
 
-  // Automated background polling if not ready
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (readiness !== 'ready' && readiness !== 'permission_denied' && readiness !== 'unsupported') {
-        interval = setInterval(() => {
-            checkLocationReadiness(true);
-        }, 5000); // Poll every 5 seconds
-    }
-    return () => clearInterval(interval);
-  }, [readiness, checkLocationReadiness]);
-
-  const retryLocation = useCallback(() => {
-    return checkLocationReadiness(true);
-  }, [checkLocationReadiness]);
-
-  const createFieldDutySession = useCallback(async (lat: number, lon: number) => {
+  // Stop Field Duty
+  const stopDuty = useCallback(async (): Promise<void> => {
     if (!currentUser) return;
     try {
-      const res = await startFieldDutySession(currentUser, { latitude: lat, longitude: lon, accuracy: coords?.accuracy || 10 });
-      if (res.success && res.session) {
-        setActiveSession(res.session);
+      if (activeSession) {
+        await apiEndFieldDutySession(currentUser, activeSession.sessionId || activeSession.id);
       }
-    } catch (err) {
-      console.error('Failed to create field duty session:', err);
-    }
-  }, [currentUser, coords]);
-
-  const endFieldDutySession = useCallback(async () => {
-    if (!currentUser || !activeSession) return;
-    try {
-      await apiEndFieldDutySession(currentUser, activeSession.sessionId || activeSession.id);
       setActiveSession(null);
+      setGpsStatus('idle');
     } catch (err) {
-      console.error('Failed to end field duty session:', err);
+      console.error('Failed to stop field duty session:', err);
     }
   }, [currentUser, activeSession]);
 
-  /**
-   * Request verified shop location for customer creation/editing
-   */
+  const checkLocationReadiness = useCallback(async (_forceFresh: boolean = false): Promise<boolean> => {
+    const perm = await getLocationPermissionState();
+    setPermissionState(perm);
+    return perm !== 'denied';
+  }, []);
+
+  const retryLocation = useCallback(async (): Promise<boolean> => {
+    return startDuty();
+  }, [startDuty]);
+
   const requestShopLocation = useCallback(async (): Promise<{
     latitude: number;
     longitude: number;
@@ -251,100 +198,28 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
     capturedAt: string;
     capturedByUserId: string;
   } | null> => {
-    if (!currentUser || currentUser.role !== 'sales') {
-      try {
-        const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 10000 });
+    try {
+      const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 10000 });
+      return {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        capturedAt: new Date().toISOString(),
+        capturedByUserId: currentUser?.uid || 'system'
+      };
+    } catch {
+      if (coords) {
         return {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
           capturedAt: new Date().toISOString(),
           capturedByUserId: currentUser?.uid || 'system'
         };
-      } catch {
-        return null;
       }
+      return null;
     }
-
-    // For sales staff: Ensure location gate is checked fresh
-    const isReady = await checkLocationReadiness(true);
-    if (!isReady || !coords) return null;
-
-    return {
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      accuracy: coords.accuracy,
-      capturedAt: new Date().toISOString(),
-      capturedByUserId: currentUser.uid
-    };
-  }, [currentUser, checkLocationReadiness, coords]);
-
-  // Initial check on mount or when user changes
-  useEffect(() => {
-    let isMounted = true;
-    if (currentUser && currentUser.role === 'sales') {
-      checkLocationReadiness(false).then(() => {
-        if (!isMounted) return;
-      });
-    } else {
-      setReadiness('ready');
-      setIsChecking(false);
-      setIsLocationLost(false);
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUser, checkLocationReadiness]);
-
-  // Continuous background location monitoring & Location Lost detection
-  useEffect(() => {
-    if (!currentUser || currentUser.role !== 'sales' || readiness !== 'ready') {
-      stopWatchingLocation();
-      return;
-    }
-
-    stopWatchingLocation();
-
-    const id = startWatchingLocation(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const acc = pos.coords.accuracy;
-        const nowIso = new Date().toISOString();
-
-        if (acc <= GPS_GATE_MAX_ACCURACY_METERS) {
-          setCoords({ latitude: lat, longitude: lon, accuracy: acc });
-          setLastVerifiedAt(nowIso);
-          setIsLocationLost(false);
-          prevIsLocationLostRef.current = false;
-        }
-      },
-      (err) => {
-        console.warn('Background GPS tracking loss event:', err.message);
-        // Distinguish between PERMISSION_DENIED (user action needed) and POSITION_UNAVAILABLE/TIMEOUT (auto-recovery)
-        if (err.code === err.PERMISSION_DENIED) {
-           setIsLocationLost(true);
-           setErrorMessage('Location permission is blocked. Please allow Location for Glowzaa in browser settings.');
-           logLocationAuditEvent('SALES_LOCATION_PERMISSION_DENIED', 'Permission denied during watch', 'PERMISSION_DENIED');
-        } else {
-           // Do not immediately mark as "lost" to the user, keep trying in background
-           console.log('GPS signal temporarily unavailable, auto-recovering...');
-           // Keep isLocationLost as false to allow auto-recovery, or set a "searching" state in UI if needed
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: 10000
-      }
-    );
-
-    watchIdRef.current = id;
-
-    return () => {
-      stopWatchingLocation();
-    };
-  }, [currentUser, readiness, logLocationAuditEvent]);
+  }, [currentUser, coords]);
 
   return (
     <LocationGateContext.Provider
@@ -357,8 +232,9 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
         isChecking,
         isLocationLost,
         activeSession,
-        createFieldDutySession,
-        endFieldDutySession,
+        gpsStatus,
+        startDuty,
+        stopDuty,
         checkLocationReadiness,
         retryLocation,
         requestShopLocation
