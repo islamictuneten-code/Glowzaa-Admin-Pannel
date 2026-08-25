@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Switch } from '@radix-ui/react-switch';
+import * as Switch from '@radix-ui/react-switch';
 import { useLocationGate } from '../../context/LocationGateContext';
 import { GpsManager, GpsUpdate } from '../../services/locationService';
 
@@ -46,24 +46,20 @@ export const FieldDutyToggle: React.FC = () => {
   if (currentUser?.role !== 'sales') return null;
 
   return (
-    <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200">
-      <div>
-        <p className="text-sm font-semibold text-slate-800">Field Duty</p>
-        {isOn && gpsUpdate ? (
-          <p className="text-xs text-emerald-600 font-medium">
-            {gpsUpdate.state === 'connected' ? `GPS: Connected • ${Math.round(gpsUpdate.coords.accuracy)}m` : 'Searching...'}
-          </p>
-        ) : (
-          <p className="text-xs text-slate-500">OFF DUTY</p>
-        )}
-      </div>
+    <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded-lg border border-slate-200">
       <Switch.Root
         checked={isOn}
         onCheckedChange={handleToggle}
-        className="w-12 h-6 bg-slate-200 rounded-full relative data-[state=checked]:bg-teal-600 transition-colors"
+        className="w-10 h-5 bg-slate-300 rounded-full relative data-[state=checked]:bg-teal-600 transition-colors"
       >
-        <Switch.Thumb className="block w-5 h-5 bg-white rounded-full shadow-lg transition-transform duration-100 translate-x-0.5 data-[state=checked]:translate-x-[26px]" />
+        <Switch.Thumb className="block w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-100 translate-x-0.5 data-[state=checked]:translate-x-[21px]" />
       </Switch.Root>
+      <div className="flex flex-col">
+        <p className="text-[10px] font-bold text-slate-700 leading-tight">DUTY</p>
+        <p className={`text-[9px] font-medium leading-tight ${isOn ? 'text-emerald-600' : 'text-slate-500'}`}>
+          {isOn ? 'ACTIVE' : 'OFF'}
+        </p>
+      </div>
     </div>
   );
 };

@@ -289,48 +289,36 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (acc <= GPS_GATE_MAX_ACCURACY_METERS) {
           setCoords({ latitude: lat, longitude: lon, accuracy: acc });
           setLastVerifiedAt(nowIso);
-
-          if (prevIsLocationLostRef.current) {
-            prevIsLocationLostRef.current = false;
-            setIsLocationLost(false);
-            logLocationAuditEvent('SALES_LOCATION_RESTORED', `Location restored: Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}, ±${Math.round(acc)}m`);
-          }
+          setIsLocationLost(false);
+          prevIsLocationLostRef.current = false;
         }
       },
       (err) => {
         console.warn('Background GPS tracking loss event:', err.message);
-        if (!prevIsLocationLostRef.current) {
-          prevIsLocationLostRef.current = true;
-          setIsLocationLost(true);
-          logLocationAuditEvent('SALES_LOCATION_LOST', `Location tracking lost: ${err.message}`, 'GPS_LOST');
+        // Distinguish between PERMISSION_DENIED (user action needed) and POSITION_UNAVAILABLE/TIMEOUT (auto-recovery)
+        if (err.code === err.PERMISSION_DENIED) {
+           setIsLocationLost(true);
+           setErrorMessage('Location permission is blocked. Please allow Location for Glowzaa in browser settings.');
+           logLocationAuditEvent('SALES_LOCATION_PERMISSION_DENIED', 'Permission denied during watch', 'PERMISSION_DENIED');
+        } else {
+           // Do not immediately mark as "lost" to the user, keep trying in background
+           console.log('GPS signal temporarily unavailable, auto-recovering...');
+           // Keep isLocationLost as false to allow auto-recovery, or set a "searching" state in UI if needed
         }
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
+        timeout: 20000,
         maximumAge: 10000
       }
     );
 
     watchIdRef.current = id;
 
-    // Freshness timer check: If last verified timestamp is older than 10 minutes, set location lost
-    const staleInterval = setInterval(() => {
-      if (lastVerifiedAt) {
-        const ageMs = Date.now() - new Date(lastVerifiedAt).getTime();
-        if (ageMs > LOCATION_STALE_TIMEOUT_MS && !prevIsLocationLostRef.current) {
-          prevIsLocationLostRef.current = true;
-          setIsLocationLost(true);
-          logLocationAuditEvent('SALES_LOCATION_LOST', 'Location data stale (> 10 minutes without GPS update)', 'LOCATION_STALE');
-        }
-      }
-    }, 60000);
-
     return () => {
-      clearInterval(staleInterval);
       stopWatchingLocation();
     };
-  }, [currentUser, readiness, lastVerifiedAt, logLocationAuditEvent]);
+  }, [currentUser, readiness, logLocationAuditEvent]);
 
   return (
     <LocationGateContext.Provider

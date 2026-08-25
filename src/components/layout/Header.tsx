@@ -160,7 +160,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
         </div>
 
         {/* Right: Search, Notifications & Authenticated User Profile */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-3 sm:gap-4">
           
           {/* Global Search Input */}
           <div className="relative hidden xl:block w-64">
@@ -176,7 +176,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
 
           {/* Quick Context Action based on active role */}
           {role === 'sales' && (
-            <div className="hidden sm:flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <FieldDutyToggle />
               <button
                 onClick={() => setSalesTab('create_order')}
