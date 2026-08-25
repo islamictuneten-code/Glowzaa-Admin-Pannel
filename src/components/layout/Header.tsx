@@ -4,23 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
 import { NotificationCenter } from '../shared/NotificationCenter';
-import { 
-  ShieldCheck, 
-  TrendingUp, 
-  Truck, 
-  Search, 
-  Bell, 
-  Menu, 
-  X, 
-  PlusCircle, 
-  Building2,
-  ChevronDown,
-  Package,
-  Banknote,
-  LogOut,
-  User,
-  Check
-} from 'lucide-react';
+import { ShieldCheck, TrendingUp, Truck, Search, Bell, Menu, X, PlusCircle, Building2, ChevronDown, Package, Banknote, LogOut, User, Check } from 'lucide-react';
+import { FieldDutyToggle } from '../sales/FieldDutyToggle';
 
 interface HeaderProps {
   onToggleMobileSidebar: () => void;
@@ -191,13 +176,16 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
 
           {/* Quick Context Action based on active role */}
           {role === 'sales' && (
-            <button
-              onClick={() => setSalesTab('create_order')}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#087F7A] text-white hover:bg-[#075E5B] shadow-2xs transition-colors cursor-pointer"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Create Order</span>
-            </button>
+            <div className="hidden sm:flex items-center gap-3">
+              <FieldDutyToggle />
+              <button
+                onClick={() => setSalesTab('create_order')}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#087F7A] text-white hover:bg-[#075E5B] shadow-2xs transition-colors cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Create Order</span>
+              </button>
+            </div>
           )}
 
           {role === 'delivery' && (

@@ -200,6 +200,17 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser, logLocationAuditEvent]);
 
+  // Automated background polling if not ready
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (readiness !== 'ready' && readiness !== 'permission_denied' && readiness !== 'unsupported') {
+        interval = setInterval(() => {
+            checkLocationReadiness(true);
+        }, 5000); // Poll every 5 seconds
+    }
+    return () => clearInterval(interval);
+  }, [readiness, checkLocationReadiness]);
+
   const retryLocation = useCallback(() => {
     return checkLocationReadiness(true);
   }, [checkLocationReadiness]);
