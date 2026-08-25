@@ -817,6 +817,18 @@ export interface PayrollSummaryStats {
 // STEP 14: FIELD SALES TRACKING SYSTEM TYPES
 // ============================================================================
 
+export type GpsConnectionState =
+  | 'idle'
+  | 'requesting'
+  | 'searching'
+  | 'connected'
+  | 'weak'
+  | 'temporarily_lost'
+  | 'permission_denied'
+  | 'gps_disabled'
+  | 'timeout'
+  | 'offline';
+
 export type LocationReadiness = 
   | 'checking' 
   | 'ready' 

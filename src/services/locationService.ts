@@ -3,13 +3,93 @@
  * Location & Geolocation Service for Field Sales Tracking (Phase 3)
  */
 
-export type GpsSignalQuality = 'excellent' | 'good' | 'moderate' | 'weak' | 'searching' | 'error' | 'denied' | 'disabled' | 'offline';
+import { GpsConnectionState } from '../types';
 
-export interface GpsStatusInfo {
-  state: GpsSignalQuality;
-  label: string;
-  subLabel: string;
-  accuracyMeters: number | null;
+// ... (keep existing exports)
+
+// ...
+
+export interface GpsUpdate {
+  coords: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  };
+  timestamp: number;
+  state: GpsConnectionState;
+}
+
+export class GpsManager {
+  private activeWatchId: number | null = null;
+  private onUpdate: (update: GpsUpdate) => void;
+  private lastPosition: GeolocationPosition | null = null;
+  private attemptCount = 0;
+  private readonly MAX_ATTEMPTS = 3;
+
+  constructor(onUpdate: (update: GpsUpdate) => void) {
+    this.onUpdate = onUpdate;
+  }
+
+  async start(forceFresh = false) {
+    this.attemptCount = 0;
+    this.onUpdate({ state: 'requesting', coords: { latitude: 0, longitude: 0, accuracy: 0 }, timestamp: Date.now() });
+    await this.acquirePosition();
+  }
+
+  private async acquirePosition() {
+    if (this.attemptCount >= this.MAX_ATTEMPTS) {
+      this.onUpdate({ state: 'timeout', coords: { latitude: 0, longitude: 0, accuracy: 0 }, timestamp: Date.now() });
+      return;
+    }
+    
+    this.attemptCount++;
+    this.onUpdate({ state: 'searching', coords: { latitude: 0, longitude: 0, accuracy: 0 }, timestamp: Date.now() });
+
+    try {
+      const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
+      this.lastPosition = pos;
+      this.onUpdate({ 
+        state: 'connected', 
+        coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }, 
+        timestamp: pos.timestamp 
+      });
+      this.startWatcher();
+    } catch (err: any) {
+      console.error('GPS acquisition attempt failed', err);
+      // Determine state based on error
+      let state: GpsConnectionState = 'searching';
+      if (err.message.includes('permission')) state = 'permission_denied';
+      
+      this.onUpdate({ state, coords: { latitude: 0, longitude: 0, accuracy: 0 }, timestamp: Date.now() });
+      
+      // Controlled backoff retry
+      setTimeout(() => this.acquirePosition(), this.attemptCount * 2000);
+    }
+  }
+
+  private startWatcher() {
+    if (this.activeWatchId !== null) stopWatchingLocation(this.activeWatchId);
+    
+    this.activeWatchId = startWatchingLocation(
+      (pos) => {
+        this.lastPosition = pos;
+        this.onUpdate({ 
+          state: 'connected', 
+          coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }, 
+          timestamp: pos.timestamp 
+        });
+      },
+      (err) => {
+        console.warn('GPS watcher error', err);
+        this.onUpdate({ state: 'temporarily_lost', coords: this.lastPosition ? { latitude: this.lastPosition.coords.latitude, longitude: this.lastPosition.coords.longitude, accuracy: this.lastPosition.coords.accuracy } : { latitude: 0, longitude: 0, accuracy: 0 }, timestamp: Date.now() });
+      }
+    );
+  }
+
+  stop() {
+    stopWatchingLocation(this.activeWatchId);
+    this.activeWatchId = null;
+  }
 }
 
 export interface GeolocationCoordinatesClean {
