@@ -24,38 +24,188 @@ import {
   NotificationPriority 
 } from '../types';
 
-// Web Audio API Chime Synthesizer for high-priority notification sounds
+// Web Audio API Chime Synthesizer & Mobile Sound Engine Unlock
+let globalAudioContext: AudioContext | null = null;
+
+export const getSharedAudioContext = (): AudioContext | null => {
+  if (typeof window === 'undefined') return null;
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextClass) return null;
+
+  if (!globalAudioContext || globalAudioContext.state === 'closed') {
+    globalAudioContext = new AudioContextClass();
+  }
+  return globalAudioContext;
+};
+
+export const unlockAudioEngine = async () => {
+  try {
+    const ctx = getSharedAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+    if (ctx) {
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    }
+  } catch (err) {
+    console.warn('Unlock audio engine notice:', err);
+  }
+};
+
+// Global auto-unlock listeners on mobile user interaction
+if (typeof window !== 'undefined') {
+  const handleAutoUnlock = () => {
+    unlockAudioEngine();
+  };
+  window.addEventListener('pointerdown', handleAutoUnlock, { passive: true });
+  window.addEventListener('touchstart', handleAutoUnlock, { passive: true });
+  window.addEventListener('click', handleAutoUnlock, { passive: true });
+  window.addEventListener('keydown', handleAutoUnlock, { passive: true });
+}
+
+// Multi-tone chime synthesizer for audible notification alerts on Android & Desktop
 export const playNotificationSound = (priority: NotificationPriority = 'normal') => {
   try {
-    if (typeof window === 'undefined') return;
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
 
-    const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = priority === 'urgent' ? 'sawtooth' : 'sine';
-    
-    // Higher pitch alerts for urgent
-    const startFreq = priority === 'urgent' ? 880 : priority === 'important' ? 660 : 523.25; // A5, E5, C5
-    osc.frequency.setValueAtTime(startFreq, ctx.currentTime);
-    if (priority === 'urgent') {
-      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
-    } else {
-      osc.frequency.exponentialRampToValueAtTime(784, ctx.currentTime + 0.2); // G5
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
     }
 
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (priority === 'urgent' ? 0.4 : 0.3));
+    const now = ctx.currentTime;
+    const gainNode = ctx.createGain();
+    gainNode.connect(ctx.destination);
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    // Physical vibration feedback on mobile devices
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(priority === 'urgent' ? [400, 150, 400, 150, 400] : [250, 100, 250]);
+      } catch {}
+    }
 
-    osc.start();
-    osc.stop(ctx.currentTime + (priority === 'urgent' ? 0.4 : 0.3));
+    if (priority === 'urgent') {
+      // 🚨 High Alert Dual-Tone Loud Ring (A5 880Hz -> D6 1174Hz -> E6 1318Hz)
+      gainNode.gain.setValueAtTime(0.7, now);
+
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      
+      osc1.type = 'sawtooth';
+      osc2.type = 'sine';
+
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.exponentialRampToValueAtTime(1174.66, now + 0.15);
+
+      osc2.frequency.setValueAtTime(1318.5, now + 0.18);
+      osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.35);
+
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+
+      osc1.start(now);
+      osc1.stop(now + 0.17);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.48);
+    } else if (priority === 'important') {
+      // 🔔 Important Chime (659Hz -> 880Hz)
+      gainNode.gain.setValueAtTime(0.6, now);
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now);
+      osc.frequency.setValueAtTime(880, now + 0.12);
+
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+      osc.connect(gainNode);
+      osc.start(now);
+      osc.stop(now + 0.38);
+    } else {
+      // 🎵 Standard Notice Chime (523Hz -> 659Hz)
+      gainNode.gain.setValueAtTime(0.5, now);
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.1);
+
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      osc.connect(gainNode);
+      osc.start(now);
+      osc.stop(now + 0.34);
+    }
   } catch (err) {
     console.warn('Audio chime notice:', err);
+  }
+};
+
+// Android Mobile & Desktop System Push Banner Handler
+export const displaySystemNotification = async (
+  title: string,
+  options: {
+    body: string;
+    icon?: string;
+    tag?: string;
+    priority?: NotificationPriority;
+    actionUrl?: string;
+  }
+) => {
+  if (typeof window === 'undefined') return;
+
+  // 1. Play audio chime alert & trigger hardware vibration
+  playNotificationSound(options.priority || 'normal');
+
+  // 2. Check notification permission
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+
+  const notifOptions: any = {
+    body: options.body,
+    icon: options.icon || '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: options.tag || `glowzaa-push-${Date.now()}`,
+    renotify: true,
+    requireInteraction: options.priority === 'urgent',
+    vibrate: options.priority === 'urgent' ? [400, 150, 400, 150, 400] : [250, 100, 250],
+    data: {
+      actionUrl: options.actionUrl || '/',
+      timestamp: Date.now()
+    }
+  };
+
+  // Modern Android Chrome REQUIREMENT: ServiceWorkerRegistration.showNotification()
+  try {
+    if ('serviceWorker' in navigator) {
+      let reg: ServiceWorkerRegistration | undefined;
+      try {
+        reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+      } catch {}
+      if (!reg) {
+        try {
+          reg = await navigator.serviceWorker.ready;
+        } catch {}
+      }
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, notifOptions);
+        return;
+      }
+    }
+  } catch (swErr) {
+    console.warn('SW showNotification fallback error:', swErr);
+  }
+
+  // Desktop / Safari direct constructor fallback
+  try {
+    new Notification(title, notifOptions);
+  } catch (err) {
+    console.warn('Direct Notification constructor error:', err);
   }
 };
 
@@ -175,6 +325,12 @@ export const requestNotificationPermissionAndRegisterToken = async (
 
     if (tokenString) {
       await registerPushTokenInFirestore(user, tokenString);
+      await unlockAudioEngine();
+      await displaySystemNotification('Glowzaa B2B Notifications Enabled 🔔', {
+        body: 'System push alerts and sound chimes are now active on your device.',
+        priority: 'normal',
+        tag: `permission_welcome_${Date.now()}`
+      });
       return { success: true, token: tokenString, permissionGranted: true };
     }
 
@@ -253,18 +409,20 @@ export const sendStaffNotificationInFirestore = async (
       sentAt: serverTimestamp()
     });
 
-    // If browser system notification is available in foreground/background, trigger browser notification immediately
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    // Display System Notification with Audio Chime and SW Push Banner
+    if (typeof window !== 'undefined') {
       try {
         if (payload.recipientUserId === 'all' || payload.recipientUserId === sender.uid || payload.recipientRole === sender.role) {
-          new Notification(payload.title, {
+          await displaySystemNotification(payload.title, {
             body: payload.message,
-            icon: '/icon-192.png',
-            tag: notifId
+            priority: payload.priority,
+            tag: notifId,
+            actionUrl: cleanedNotifRecord.actionUrl
           });
-          playNotificationSound(payload.priority);
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Local dispatch system notification notice:', err);
+      }
     }
 
     return { success: true, notificationId: notifId };

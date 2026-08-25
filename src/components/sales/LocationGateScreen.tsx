@@ -39,6 +39,13 @@ export const LocationGateScreen: React.FC = () => {
   const isGpsAcquired = Boolean(coords && coords.latitude && coords.longitude);
   const isAccuracyGood = Boolean(coords?.accuracy && coords.accuracy <= 100);
 
+  // Auto-verify gate when all diagnostic metrics are green
+  React.useEffect(() => {
+    if (isPermissionGranted && isGpsAcquired && isAccuracyGood && readiness !== 'ready' && !isChecking) {
+      retryLocation();
+    }
+  }, [isPermissionGranted, isGpsAcquired, isAccuracyGood, readiness, isChecking, retryLocation]);
+
   return (
     <div className="min-h-screen bg-[#102A2A] text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans antialiased selection:bg-[#087F7A]">
       {/* Top Header */}

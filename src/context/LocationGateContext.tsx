@@ -173,6 +173,17 @@ export const LocationGateProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.warn('Location readiness check failed:', err);
       const msg = err.message || 'Unable to access device location.';
 
+      // If we already have valid coordinates in state from background tracking or previous check, preserve ready state
+      if (coords && coords.latitude && coords.longitude && coords.accuracy <= GPS_GATE_MAX_ACCURACY_METERS) {
+        setReadiness('ready');
+        setErrorMessage(null);
+        setPermissionState('granted');
+        setIsLocationLost(false);
+        setIsChecking(false);
+        return true;
+      }
+
+      setCoords(null);
       if (msg.includes('permission') || msg.includes('Permission')) {
         setReadiness('permission_denied');
         setPermissionState('denied');

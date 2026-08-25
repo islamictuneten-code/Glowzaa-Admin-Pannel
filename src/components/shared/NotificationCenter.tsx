@@ -33,7 +33,9 @@ import {
   deleteNotificationInFirestore,
   requestNotificationPermissionAndRegisterToken,
   listenForegroundPushMessages,
-  playNotificationSound
+  playNotificationSound,
+  displaySystemNotification,
+  unlockAudioEngine
 } from '../../services/notificationService';
 
 // Native date formatting helper
@@ -103,16 +105,12 @@ export const NotificationCenter: React.FC = () => {
           const latest = list[0];
           if (latest && !latest.isRead) {
             if (soundEnabled) {
-              playNotificationSound(latest.priority);
-            }
-            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              try {
-                new Notification(latest.title, {
-                  body: latest.message,
-                  icon: '/icon-192.png',
-                  tag: latest.id || latest.notificationId
-                });
-              } catch {}
+              displaySystemNotification(latest.title, {
+                body: latest.message,
+                priority: latest.priority,
+                actionUrl: latest.actionUrl,
+                tag: latest.id || latest.notificationId
+              });
             }
           }
         }
@@ -131,9 +129,17 @@ export const NotificationCenter: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
     const unsubscribe = listenForegroundPushMessages((payload) => {
+      const title = payload.notification?.title || payload.data?.title || 'Glowzaa B2B Alert';
+      const body = payload.notification?.body || payload.data?.body || payload.data?.message || 'New order notice';
+      const priority: NotificationPriority = payload.data?.priority || 'normal';
+
       if (soundEnabled) {
-        const p: NotificationPriority = payload.data?.priority || 'normal';
-        playNotificationSound(p);
+        displaySystemNotification(title, {
+          body,
+          priority,
+          actionUrl: payload.data?.actionUrl,
+          tag: payload.data?.notificationId
+        });
       }
     });
     return () => {
@@ -147,16 +153,29 @@ export const NotificationCenter: React.FC = () => {
     if (!currentUser) return;
     setIsRegistering(true);
     try {
+      await unlockAudioEngine();
       const res = await requestNotificationPermissionAndRegisterToken(currentUser);
       if (typeof window !== 'undefined' && 'Notification' in window) {
         setPermissionState(Notification.permission);
       }
       if (res.success) {
-        playNotificationSound('normal');
+        await displaySystemNotification('System Push Notifications Activated! 🔔', {
+          body: 'Order alerts and high-priority sound chimes will now display on your phone status bar.',
+          priority: 'important'
+        });
       }
     } finally {
       setIsRegistering(false);
     }
+  };
+
+  const handleTestSoundAndPush = async () => {
+    await unlockAudioEngine();
+    await displaySystemNotification('Glowzaa Sound & Push Test 🔔', {
+      body: 'Phone status bar banner and loud sound chime are functioning properly!',
+      priority: 'urgent',
+      tag: `test_push_${Date.now()}`
+    });
   };
 
   const handleMarkAsRead = async (notif: StaffNotification) => {
@@ -275,11 +294,19 @@ export const NotificationCenter: React.FC = () => {
             
             <div className="flex items-center space-x-1">
               <button
+                onClick={handleTestSoundAndPush}
+                className="px-2 py-1 text-[11px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-300 rounded border border-rose-200/60 dark:border-rose-900 flex items-center space-x-1 transition-colors"
+                title="Test Sound Chime & Status Bar Push Notification"
+              >
+                <Volume2 className="w-3 h-3 text-rose-600" />
+                <span>Test Alert</span>
+              </button>
+              <button
                 onClick={() => setSoundEnabled(!soundEnabled)}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded"
                 title={soundEnabled ? 'Mute Chime' : 'Unmute Chime'}
               >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-slate-300" />}
+                {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
               </button>
               <button
                 onClick={() => setIsOpen(false)}

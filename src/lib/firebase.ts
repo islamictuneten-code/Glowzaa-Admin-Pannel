@@ -51,10 +51,12 @@ async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error: any) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
+    const msg = error?.message || String(error);
+    const code = error?.code || '';
+    if (code === 'unavailable' || msg.includes('the client is offline') || msg.includes('Could not reach Cloud Firestore backend')) {
+      console.info("Firestore client operating with offline cache enabled. Auto-reconnecting when online.");
     } else {
-      console.warn("Firebase connection test:", error.message);
+      console.warn("Firebase connection test notice:", msg);
     }
   }
 }

@@ -355,7 +355,7 @@ export function requestCurrentLocation(options?: PositionOptions): Promise<Geolo
 
     const defaultOptions: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 15000,
+      timeout: 10000,
       maximumAge: 30000,
       ...options
     };
@@ -363,10 +363,42 @@ export function requestCurrentLocation(options?: PositionOptions): Promise<Geolo
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve(pos),
       (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          return reject(new Error('Location permission is required. Please allow location access in browser settings.'));
+        }
+
+        // Fallback attempt with enableHighAccuracy: false if high accuracy timed out or failed
+        if (defaultOptions.enableHighAccuracy) {
+          navigator.geolocation.getCurrentPosition(
+            (fallbackPos) => resolve(fallbackPos),
+            (fallbackErr) => {
+              let message = 'Failed to acquire device location.';
+              switch (fallbackErr.code) {
+                case fallbackErr.PERMISSION_DENIED:
+                  message = 'Location permission was denied in browser settings.';
+                  break;
+                case fallbackErr.POSITION_UNAVAILABLE:
+                  message = 'Unable to get your current location. Please ensure device GPS/Location is turned on.';
+                  break;
+                case fallbackErr.TIMEOUT:
+                  message = 'Location request timed out. Please retry or check device location settings.';
+                  break;
+              }
+              reject(new Error(message));
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 10000,
+              maximumAge: 60000
+            }
+          );
+          return;
+        }
+
         let message = 'Failed to acquire device location.';
         switch (err.code) {
           case err.PERMISSION_DENIED:
-            message = 'Location permission is required to capture the shop location. Please allow location access in browser settings.';
+            message = 'Location permission is required to capture location.';
             break;
           case err.POSITION_UNAVAILABLE:
             message = 'Unable to get your current location. Please enable device location/GPS.';
