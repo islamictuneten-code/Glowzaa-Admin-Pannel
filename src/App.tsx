@@ -10,8 +10,13 @@ import { CustomerDetailModal } from './components/shared/CustomerDetailModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { AccessDenied } from './components/auth/AccessDenied';
 
+import { LocationGateProvider, useLocationGate } from './context/LocationGateContext';
+import { LocationGateScreen } from './components/sales/LocationGateScreen';
+import { LocationLostModal } from './components/sales/LocationLostModal';
+
 // Admin Components
 import { AdminOverview } from './components/admin/AdminOverview';
+import { AdminFieldTrackingView } from './components/admin/AdminFieldTrackingView';
 import { AdminProducts } from './components/admin/AdminProducts';
 import { AdminCategories } from './components/admin/AdminCategories';
 import { AdminInventory } from './components/admin/AdminInventory';
@@ -29,6 +34,8 @@ import { AdminProfitLoss } from './components/admin/AdminProfitLoss';
 import { AdminExpenses } from './components/admin/AdminExpenses';
 import { AdminSettings } from './components/admin/AdminSettings';
 import { AdminWarehouses } from './components/admin/AdminWarehouses';
+import { AdminPayroll } from './components/admin/AdminPayroll';
+import { MySalaryView } from './components/shared/MySalaryView';
 
 // Sales Components
 import { SalesOverview } from './components/sales/SalesOverview';
@@ -70,6 +77,8 @@ const DashboardContent: React.FC = () => {
       switch (adminTab) {
         case 'dashboard':
           return <AdminOverview />;
+        case 'field_tracking':
+          return <AdminFieldTrackingView />;
         case 'products':
           return <AdminProducts />;
         case 'categories':
@@ -86,6 +95,8 @@ const DashboardContent: React.FC = () => {
           return <AdminPurchases />;
         case 'expenses':
           return <AdminExpenses />;
+        case 'payroll':
+          return <AdminPayroll />;
         case 'staff_management':
         case 'sales_staff':
         case 'delivery_staff':
@@ -132,6 +143,8 @@ const DashboardContent: React.FC = () => {
           return <SalesCustomerDue />;
         case 'sales_summary':
           return <SalesSummary />;
+        case 'my_salary':
+          return <MySalaryView />;
         default:
           return <SalesOverview />;
       }
@@ -159,6 +172,8 @@ const DashboardContent: React.FC = () => {
           return <AdminExpenses />;
         case 'collection_history':
           return <DeliveryCollectionHistory />;
+        case 'my_salary':
+          return <MySalaryView />;
         default:
           return <DeliveryOverview />;
       }
@@ -174,9 +189,53 @@ const DashboardContent: React.FC = () => {
   );
 };
 
+const MainAppContent: React.FC = () => {
+  const { currentUser } = useAuth();
+  const { readiness } = useLocationGate();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Mandatory Location Gate enforcement for Sales users ONLY
+  if (currentUser && currentUser.role === 'sales' && readiness !== 'ready') {
+    return <LocationGateScreen />;
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F5F8FA] text-[#102A2A] flex flex-col font-sans antialiased selection:bg-[#087F7A] selection:text-white">
+      {/* Top Header */}
+      <Header 
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+      />
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Responsive Desktop/Tablet Sidebar */}
+        <Sidebar 
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        />
+
+        {/* Active View Container */}
+        <ErrorBoundary>
+          <DashboardContent />
+        </ErrorBoundary>
+      </div>
+
+      {/* Fixed Mobile Bottom Navigation */}
+      <MobileBottomNav />
+
+      {/* Real-time Location Lost Modal Overlay */}
+      {currentUser?.role === 'sales' && <LocationLostModal />}
+
+      {/* Global Modal & Notification Layers */}
+      <InvoiceModal />
+      <CustomerDetailModal />
+      <ToastContainer />
+    </div>
+  );
+};
+
 const AuthenticatedApp: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Show smooth branded splash while Firebase verifies session
   if (isLoading) {
@@ -202,35 +261,9 @@ const AuthenticatedApp: React.FC = () => {
 
   return (
     <AppProvider>
-      <div className="min-h-screen bg-[#F5F8FA] text-[#102A2A] flex flex-col font-sans antialiased selection:bg-[#087F7A] selection:text-white">
-        
-        {/* Top Header */}
-        <Header 
-          onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          isMobileSidebarOpen={isMobileSidebarOpen}
-        />
-
-        <div className="flex-1 flex overflow-hidden">
-          {/* Responsive Desktop/Tablet Sidebar */}
-          <Sidebar 
-            isMobileOpen={isMobileSidebarOpen}
-            onCloseMobile={() => setIsMobileSidebarOpen(false)}
-          />
-
-          {/* Active View Container */}
-          <ErrorBoundary>
-            <DashboardContent />
-          </ErrorBoundary>
-        </div>
-
-        {/* Fixed Mobile Bottom Navigation */}
-        <MobileBottomNav />
-
-        {/* Global Modal & Notification Layers */}
-        <InvoiceModal />
-        <CustomerDetailModal />
-        <ToastContainer />
-      </div>
+      <LocationGateProvider>
+        <MainAppContent />
+      </LocationGateProvider>
     </AppProvider>
   );
 };

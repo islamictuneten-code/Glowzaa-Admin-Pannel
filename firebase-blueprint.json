@@ -376,6 +376,89 @@
         "timestamp": { "type": "string", "description": "Timestamp of action" }
       },
       "required": ["action", "targetUserId", "targetUserName", "targetRole", "performedByUserId", "performedByUserName", "timestamp"]
+    },
+    "FieldDutySession": {
+      "title": "FieldDutySession",
+      "description": "Daily field duty shift session for sales staff tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "sessionId": { "type": "string", "description": "Session identifier" },
+        "userId": { "type": "string", "description": "Sales staff Firebase Auth UID" },
+        "userLoginId": { "type": "string", "description": "Sales staff login ID" },
+        "userName": { "type": "string", "description": "Sales staff display name" },
+        "territory": { "type": "string", "description": "Assigned sales territory" },
+        "assignedArea": { "type": "string", "description": "Assigned duty area" },
+        "status": { "type": "string", "description": "Duty status", "enum": ["active", "ended", "auto_closed"] },
+        "startedAt": { "type": "string", "description": "ISO timestamp when duty was started" },
+        "endedAt": { "type": "string", "description": "ISO timestamp when duty was ended" },
+        "startLatitude": { "type": "number", "description": "Starting GPS latitude" },
+        "startLongitude": { "type": "number", "description": "Starting GPS longitude" },
+        "lastLatitude": { "type": "number", "description": "Latest reported GPS latitude" },
+        "lastLongitude": { "type": "number", "description": "Latest reported GPS longitude" },
+        "lastLocationUpdateAt": { "type": "string", "description": "Timestamp of latest GPS ping" },
+        "batteryLevel": { "type": "number", "description": "Latest device battery percentage" },
+        "gpsAccuracyMeters": { "type": "number", "description": "Latest GPS accuracy in meters" },
+        "totalVisitsCompleted": { "type": "number", "description": "Total customer visits completed" },
+        "totalOrdersBooked": { "type": "number", "description": "Total sales orders booked during shift" },
+        "totalOrdersAmountBDT": { "type": "number", "description": "Total value of booked orders in BDT" },
+        "totalPaymentsCollectedBDT": { "type": "number", "description": "Total payment collections in BDT" },
+        "totalDistanceKm": { "type": "number", "description": "Total estimated distance traveled in km" },
+        "createdAt": { "type": "string", "description": "Session creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["id", "sessionId", "userId", "userLoginId", "userName", "status", "startedAt", "totalVisitsCompleted", "totalOrdersBooked", "totalOrdersAmountBDT", "totalPaymentsCollectedBDT", "totalDistanceKm", "createdAt", "updatedAt"]
+    },
+    "GpsLocationPing": {
+      "title": "GpsLocationPing",
+      "description": "Periodic GPS location telemetry ping from active field staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "pingId": { "type": "string", "description": "Ping identifier" },
+        "sessionId": { "type": "string", "description": "Associated field duty session ID" },
+        "userId": { "type": "string", "description": "Sales staff Firebase Auth UID" },
+        "userName": { "type": "string", "description": "Sales staff display name" },
+        "latitude": { "type": "number", "description": "GPS latitude (-90 to +90)" },
+        "longitude": { "type": "number", "description": "GPS longitude (-180 to +180)" },
+        "accuracy": { "type": "number", "description": "Horizontal GPS accuracy in meters" },
+        "speed": { "type": "number", "description": "Speed in m/s" },
+        "heading": { "type": "number", "description": "Heading in degrees" },
+        "altitude": { "type": "number", "description": "Altitude in meters" },
+        "timestamp": { "type": "string", "description": "ISO timestamp of ping" },
+        "batteryLevel": { "type": "number", "description": "Device battery percentage" },
+        "isCharging": { "type": "boolean", "description": "Whether device is charging" },
+        "networkOnline": { "type": "boolean", "description": "Network connectivity status" }
+      },
+      "required": ["id", "pingId", "sessionId", "userId", "userName", "latitude", "longitude", "accuracy", "timestamp"]
+    },
+    "CustomerVisit": {
+      "title": "CustomerVisit",
+      "description": "Retail customer visit check-in and outcome log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID" },
+        "visitId": { "type": "string", "description": "Visit identifier" },
+        "sessionId": { "type": "string", "description": "Associated field duty session ID" },
+        "userId": { "type": "string", "description": "Sales staff Firebase Auth UID" },
+        "userName": { "type": "string", "description": "Sales staff display name" },
+        "customerId": { "type": "string", "description": "Target retail customer ID" },
+        "shopName": { "type": "string", "description": "Retail shop display name" },
+        "ownerName": { "type": "string", "description": "Shop owner name" },
+        "checkInTime": { "type": "string", "description": "ISO check-in timestamp" },
+        "checkInLatitude": { "type": "number", "description": "Check-in GPS latitude" },
+        "checkInLongitude": { "type": "number", "description": "Check-in GPS longitude" },
+        "checkOutTime": { "type": "string", "description": "ISO check-out timestamp" },
+        "checkOutLatitude": { "type": "number", "description": "Check-out GPS latitude" },
+        "checkOutLongitude": { "type": "number", "description": "Check-out GPS longitude" },
+        "durationMinutes": { "type": "number", "description": "Visit duration in minutes" },
+        "visitOutcome": { "type": "string", "description": "Visit outcome", "enum": ["order_booked", "payment_collected", "no_sale", "follow_up"] },
+        "notes": { "type": "string", "description": "Sales executive notes" },
+        "orderId": { "type": "string", "description": "Created order ID if booked" },
+        "paymentId": { "type": "string", "description": "Collected payment ID if received" },
+        "distanceFromShopMeters": { "type": "number", "description": "Distance from registered shop coordinates in meters" }
+      },
+      "required": ["id", "visitId", "sessionId", "userId", "userName", "customerId", "shopName", "ownerName", "checkInTime"]
     }
   },
   "firestore": {
@@ -426,6 +509,18 @@
     "/expenses/{expenseId}": {
       "schema": "Expense",
       "description": "Operating expenses records for financial accounting and P&L"
+    },
+    "/field_duty_sessions/{sessionId}": {
+      "schema": "FieldDutySession",
+      "description": "Daily field duty shift sessions for sales staff tracking"
+    },
+    "/field_location_pings/{pingId}": {
+      "schema": "GpsLocationPing",
+      "description": "Periodic GPS telemetry coordinates from active field staff"
+    },
+    "/customer_visits/{visitId}": {
+      "schema": "CustomerVisit",
+      "description": "Retail shop check-in and visit outcome tracking logs"
     }
   }
 }

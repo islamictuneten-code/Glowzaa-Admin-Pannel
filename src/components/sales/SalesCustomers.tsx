@@ -1,9 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useLocationGate } from '../../context/LocationGateContext';
 import { Customer } from '../../types';
 import { Badge } from '../shared/Badge';
 import { Modal } from '../shared/Modal';
 import { DistrictSelect } from '../shared/DistrictSelect';
+import {
+  requestCurrentLocation,
+  validateLocationAccuracy,
+  getGoogleMapsUrl
+} from '../../services/locationService';
 import { 
   Users, 
   Search, 
@@ -17,7 +23,12 @@ import {
   Store,
   CheckCircle2,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Compass,
+  ExternalLink,
+  ShieldCheck,
+  Navigation,
+  X
 } from 'lucide-react';
 
 export const SalesCustomers: React.FC = () => {
@@ -39,6 +50,11 @@ export const SalesCustomers: React.FC = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // GPS Capture State
+  const [isCapturingGps, setIsCapturingGps] = useState(false);
+  const [gpsCaptureError, setGpsCaptureError] = useState<string | null>(null);
+  const [gpsAccuracyStatus, setGpsAccuracyStatus] = useState<ReturnType<typeof validateLocationAccuracy> | null>(null);
+
   // Form State
   const [formData, setFormData] = useState({
     shopName: '',
@@ -54,7 +70,13 @@ export const SalesCustomers: React.FC = () => {
     paymentTermDays: 15,
     tradeLicenseNo: '',
     notes: '',
-    status: 'active' as 'active' | 'inactive'
+    status: 'active' as 'active' | 'inactive',
+    latitude: null as number | null,
+    longitude: null as number | null,
+    locationAccuracyMeters: null as number | null,
+    isGpsVerified: false,
+    locationCapturedAt: null as string | null,
+    locationCapturedByUserId: null as string | null
   });
 
   // Duplicate Phone Warning State
@@ -112,6 +134,77 @@ export const SalesCustomers: React.FC = () => {
     .filter(c => c.assignedSalesUserId === currentSalesUser.id || c.assignedSalesSellerId === currentSalesUser.id)
     .reduce((sum, c) => sum + (c.currentDue || 0), 0);
 
+  const { requestShopLocation } = useLocationGate();
+
+  const handleCaptureShopLocation = async () => {
+    setIsCapturingGps(true);
+    setGpsCaptureError(null);
+    try {
+      let lat: number | null = null;
+      let lon: number | null = null;
+      let accuracy: number | null = null;
+
+      const shopLoc = await requestShopLocation();
+      if (shopLoc) {
+        lat = shopLoc.latitude;
+        lon = shopLoc.longitude;
+        accuracy = shopLoc.accuracy;
+      } else {
+        try {
+          const pos = await requestCurrentLocation({ enableHighAccuracy: true, timeout: 8000 });
+          lat = pos.coords.latitude;
+          lon = pos.coords.longitude;
+          accuracy = pos.coords.accuracy;
+        } catch {
+          const pos = await requestCurrentLocation({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+          lat = pos.coords.latitude;
+          lon = pos.coords.longitude;
+          accuracy = pos.coords.accuracy;
+        }
+      }
+
+      if (lat !== null && lon !== null) {
+        const validation = validateLocationAccuracy(accuracy ?? 50);
+        setGpsAccuracyStatus(validation);
+
+        setFormData(prev => ({
+          ...prev,
+          latitude: lat,
+          longitude: lon,
+          locationAccuracyMeters: accuracy,
+          isGpsVerified: true,
+          locationCapturedAt: new Date().toISOString(),
+          locationCapturedByUserId: currentSalesUser.id
+        }));
+
+        if (accuracy && accuracy > 80) {
+          setGpsCaptureError(`GPS captured with ±${Math.round(accuracy)}m accuracy. Coordinates are staged; click "Save Profile" below to persist to Firestore.`);
+        } else {
+          setGpsCaptureError(null);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error capturing shop location:', err);
+      setGpsCaptureError(err.message || 'Unable to capture current GPS location. Please ensure Location services are enabled on your device.');
+    } finally {
+      setIsCapturingGps(false);
+    }
+  };
+
+  const handleClearShopLocation = () => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: null,
+      longitude: null,
+      locationAccuracyMeters: null,
+      isGpsVerified: false,
+      locationCapturedAt: null,
+      locationCapturedByUserId: null
+    }));
+    setGpsAccuracyStatus(null);
+    setGpsCaptureError(null);
+  };
+
   const resetForm = () => {
     setFormData({
       shopName: '',
@@ -127,8 +220,16 @@ export const SalesCustomers: React.FC = () => {
       paymentTermDays: 15,
       tradeLicenseNo: '',
       notes: '',
-      status: 'active'
+      status: 'active',
+      latitude: null,
+      longitude: null,
+      locationAccuracyMeters: null,
+      isGpsVerified: false,
+      locationCapturedAt: null,
+      locationCapturedByUserId: null
     });
+    setGpsAccuracyStatus(null);
+    setGpsCaptureError(null);
   };
 
   const openAddModal = () => {
@@ -152,8 +253,20 @@ export const SalesCustomers: React.FC = () => {
       paymentTermDays: cust.paymentTermDays || 15,
       tradeLicenseNo: cust.tradeLicenseNo || '',
       notes: cust.notes || '',
-      status: (cust.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive'
+      status: (cust.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
+      latitude: cust.latitude ?? null,
+      longitude: cust.longitude ?? null,
+      locationAccuracyMeters: cust.locationAccuracyMeters ?? null,
+      isGpsVerified: cust.isGpsVerified ?? false,
+      locationCapturedAt: cust.locationCapturedAt ?? null,
+      locationCapturedByUserId: cust.locationCapturedByUserId ?? null
     });
+    if (cust.locationAccuracyMeters) {
+      setGpsAccuracyStatus(validateLocationAccuracy(cust.locationAccuracyMeters));
+    } else {
+      setGpsAccuracyStatus(null);
+    }
+    setGpsCaptureError(null);
   };
 
   const handleSaveCustomer = async (e: React.FormEvent, forceSave: boolean = false) => {
@@ -181,7 +294,13 @@ export const SalesCustomers: React.FC = () => {
         paymentTermDays: Number(formData.paymentTermDays) || 15,
         tradeLicenseNo: formData.tradeLicenseNo.trim(),
         notes: formData.notes.trim(),
-        status: formData.status
+        status: formData.status,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        locationAccuracyMeters: formData.locationAccuracyMeters,
+        isGpsVerified: Boolean(formData.latitude && formData.longitude) || formData.isGpsVerified,
+        locationCapturedAt: formData.locationCapturedAt,
+        locationCapturedByUserId: formData.locationCapturedByUserId
       };
 
       if (!forceSave) {
@@ -400,6 +519,11 @@ export const SalesCustomers: React.FC = () => {
                               {cust.customerId}
                             </span>
                           )}
+                          {cust.isGpsVerified && cust.latitude && cust.longitude && (
+                            <span className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-semibold">
+                              GPS
+                            </span>
+                          )}
                         </div>
                         <span className="text-[11px] text-slate-500">Proprietor: {cust.ownerName}</span>
                       </div>
@@ -599,6 +723,102 @@ export const SalesCustomers: React.FC = () => {
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white"
               />
             </div>
+
+            {/* GPS Location Capture Section (Phase 3) */}
+            <div className="sm:col-span-2 p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-800 text-xs block">Shop GPS Coordinates & Verification</span>
+                    <span className="text-[11px] text-slate-500">Required for geo-fenced staff visit verification (100m radius)</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {formData.latitude && formData.longitude ? (
+                    <button
+                      type="button"
+                      onClick={handleClearShopLocation}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+                    >
+                      Clear GPS
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleCaptureShopLocation}
+                    disabled={isCapturingGps}
+                    className="px-3 py-1.5 rounded-lg bg-[#0F766E] hover:bg-[#115E59] text-white font-bold text-xs shadow-2xs inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                  >
+                    {isCapturingGps ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Acquiring Satellites...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-3.5 h-3.5" />
+                        <span>{formData.latitude ? 'Update Shop Location' : 'Capture Shop Location'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {gpsCaptureError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">GPS Error: </span>
+                    <span>{gpsCaptureError}</span>
+                  </div>
+                </div>
+              )}
+
+              {formData.latitude && formData.longitude ? (
+                <div className="bg-white p-3 rounded-lg border border-teal-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-teal-900 font-mono">
+                        {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+                      </span>
+                      {formData.locationAccuracyMeters && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          formData.locationAccuracyMeters <= 30
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : formData.locationAccuracyMeters <= 80
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          ±{Math.round(formData.locationAccuracyMeters)}m Accuracy ({formData.locationAccuracyMeters <= 30 ? 'GOOD' : formData.locationAccuracyMeters <= 80 ? 'MODERATE' : 'POOR'})
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 block">
+                      Captured {formData.locationCapturedAt ? new Date(formData.locationCapturedAt).toLocaleString() : 'Just now'} • GPS Verified
+                    </span>
+                  </div>
+
+                  <a
+                    href={getGoogleMapsUrl(formData.latitude, formData.longitude)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg font-bold text-xs inline-flex items-center gap-1 border border-teal-200 w-fit"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>View on Google Maps</span>
+                  </a>
+                </div>
+              ) : (
+                <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 text-amber-800 text-[11px] flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>No GPS location recorded yet. Stand at the shop front and click <strong>"Capture Shop Location"</strong> to set geo-fence.</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
@@ -729,6 +949,102 @@ export const SalesCustomers: React.FC = () => {
                   onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900"
                 />
+              </div>
+
+              {/* GPS Location Capture Section (Phase 3) */}
+              <div className="sm:col-span-2 p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-800 text-xs block">Shop GPS Coordinates & Verification</span>
+                      <span className="text-[11px] text-slate-500">Required for geo-fenced staff visit verification (100m radius)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {formData.latitude && formData.longitude ? (
+                      <button
+                        type="button"
+                        onClick={handleClearShopLocation}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+                      >
+                        Clear GPS
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleCaptureShopLocation}
+                      disabled={isCapturingGps}
+                      className="px-3 py-1.5 rounded-lg bg-[#0F766E] hover:bg-[#115E59] text-white font-bold text-xs shadow-2xs inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      {isCapturingGps ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Acquiring Satellites...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="w-3.5 h-3.5" />
+                          <span>{formData.latitude ? 'Re-Capture GPS' : 'Capture Shop Location'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {gpsCaptureError && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">GPS Error: </span>
+                      <span>{gpsCaptureError}</span>
+                    </div>
+                  </div>
+                )}
+
+                {formData.latitude && formData.longitude ? (
+                  <div className="bg-white p-3 rounded-lg border border-teal-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-teal-900 font-mono">
+                          {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+                        </span>
+                        {formData.locationAccuracyMeters && (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            formData.locationAccuracyMeters <= 30
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : formData.locationAccuracyMeters <= 80
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            ±{Math.round(formData.locationAccuracyMeters)}m Accuracy ({formData.locationAccuracyMeters <= 30 ? 'GOOD' : formData.locationAccuracyMeters <= 80 ? 'MODERATE' : 'POOR'})
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-slate-500 block">
+                        Captured {formData.locationCapturedAt ? new Date(formData.locationCapturedAt).toLocaleString() : 'Recorded'} • GPS Verified
+                      </span>
+                    </div>
+
+                    <a
+                      href={getGoogleMapsUrl(formData.latitude, formData.longitude)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg font-bold text-xs inline-flex items-center gap-1 border border-teal-200 w-fit"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>View on Google Maps</span>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 text-amber-800 text-[11px] flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>No GPS location recorded yet. Stand at the shop front and click <strong>"Capture Shop Location"</strong> to set geo-fence.</span>
+                  </div>
+                )}
               </div>
             </div>
 

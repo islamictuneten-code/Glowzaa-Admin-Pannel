@@ -86,6 +86,7 @@ export type ProductCategory =
 
 export type AdminTab = 
   | 'dashboard'
+  | 'field_tracking'
   | 'products'
   | 'categories'
   | 'inventory'
@@ -97,6 +98,7 @@ export type AdminTab =
   | 'sales_staff'
   | 'delivery_staff'
   | 'staff_management'
+  | 'payroll'
   | 'payments'
   | 'customer_due'
   | 'collections'
@@ -116,7 +118,8 @@ export type SalesTab =
   | 'expenses'
   | 'customer_due'
   | 'sales_history'
-  | 'sales_summary';
+  | 'sales_summary'
+  | 'my_salary';
 
 export type DeliveryTab = 
   | 'dashboard'
@@ -128,7 +131,8 @@ export type DeliveryTab =
   | 'due_collection'
   | 'money_collected'
   | 'expenses'
-  | 'collection_history';
+  | 'collection_history'
+  | 'my_salary';
 
 export type OrderStatus = 
   | 'draft'
@@ -409,6 +413,12 @@ export interface Customer {
   area: string;
   city?: string;
   district: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAccuracyMeters?: number | null;
+  isGpsVerified?: boolean;
+  locationCapturedAt?: string | null;
+  locationCapturedByUserId?: string | null;
   notes?: string;
   assignedSalesUserId?: string;
   assignedSalesUserName?: string;
@@ -639,4 +649,259 @@ export interface Expense {
   createdAt: string;
   updatedAt?: string;
 }
+
+// ==========================================
+// PAYROLL & HR MANAGEMENT MODULE DATA TYPES
+// ==========================================
+
+export interface StaffSalaryProfile {
+  id: string; // Document ID (usually staffId or auto-generated)
+  staffId: string; // e.g. "seller01", "deliv-01", "admin01" or staff uid
+  userId: string; // Auth User UID
+  staffName: string;
+  role: UserRole;
+  department: string;
+  basicSalary: number;
+  houseRent: number;
+  medicalAllowance: number;
+  transportAllowance: number;
+  mobileAllowance: number;
+  otherAllowance: number;
+  grossSalary: number; // Calculated: basic + sum(allowances)
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo?: string; // YYYY-MM-DD (null for current)
+  salaryStatus: 'active' | 'inactive' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy?: string;
+}
+
+export type PayrollStatus = 'draft' | 'approved' | 'partially_paid' | 'paid' | 'cancelled';
+
+export interface MonthlyPayroll {
+  id: string; // Deterministic: `${payrollPeriod}_${staffId}` e.g. "2026-08_seller01"
+  payrollPeriod: string; // YYYY-MM e.g. "2026-08"
+  staffId: string;
+  userId: string;
+  staffName: string;
+  role: UserRole;
+  department: string;
+  basicSalary: number;
+  houseRent: number;
+  medicalAllowance: number;
+  transportAllowance: number;
+  mobileAllowance: number;
+  otherAllowance: number;
+  totalAllowances: number;
+  grossSalary: number;
+  totalCommission: number;
+  totalBonus: number;
+  totalIncentives: number;
+  totalAbsenceDeduction: number;
+  totalLateDeduction: number;
+  totalAdvanceDeduction: number;
+  totalLoanInstallment: number;
+  totalOtherDeductions: number;
+  totalDeductions: number;
+  netSalary: number; // (grossSalary + totalCommission + totalBonus + totalIncentives) - totalDeductions
+  paidAmount: number;
+  dueAmount: number;
+  status: PayrollStatus;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  notes?: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+}
+
+export type AdjustmentCategory = 'bonus' | 'deduction';
+
+export type AdjustmentType = 
+  | 'performance_bonus'
+  | 'sales_commission'
+  | 'delivery_incentive'
+  | 'target_achievement'
+  | 'special_bonus'
+  | 'other_incentive'
+  | 'advance_deduction'
+  | 'loan_installment'
+  | 'absence_deduction'
+  | 'late_deduction'
+  | 'damage_loss_recovery'
+  | 'other_deduction';
+
+export interface PayrollAdjustment {
+  id: string;
+  staffId: string;
+  userId: string;
+  staffName: string;
+  payrollPeriod: string; // YYYY-MM
+  category: AdjustmentCategory;
+  type: AdjustmentType;
+  amount: number;
+  reason: string;
+  notes?: string;
+  // Sales specific optional
+  salesTarget?: number;
+  salesAchievement?: number;
+  achievementPercentage?: number;
+  commissionRate?: number;
+  commissionAmount?: number;
+  // Delivery specific optional
+  deliveryCount?: number;
+  successfulDeliveries?: number;
+  codCollectionAmount?: number;
+  deliveryIncentive?: number;
+  createdAt: string;
+  createdBy: string;
+}
+
+export type AdvanceLoanStatus = 'pending' | 'active' | 'completed' | 'cancelled';
+
+export interface StaffAdvanceLoan {
+  id: string;
+  staffId: string;
+  userId: string;
+  staffName: string;
+  recordType: 'advance' | 'loan';
+  amount: number;
+  issueDate: string; // YYYY-MM-DD
+  reason: string;
+  repaymentAmount: number; // Total paid back
+  remainingBalance: number; // amount - repaymentAmount
+  installmentAmount: number; // Expected monthly deduction
+  status: AdvanceLoanStatus;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type SalaryPaymentStatus = 'DRAFT' | 'APPROVED' | 'PAID' | 'REVERSED';
+
+export interface SalaryPayment {
+  id: string;
+  payrollId: string;
+  payrollPeriod: string;
+  staffId: string;
+  userId: string;
+  staffName: string;
+  amount: number;
+  paymentDate: string; // YYYY-MM-DD
+  paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Banking' | 'Other';
+  transactionReference?: string;
+  notes?: string;
+  paidBy: string;
+  paidByName?: string;
+  status: SalaryPaymentStatus;
+  createdAt: string;
+}
+
+export interface PayrollSummaryStats {
+  totalStaff: number;
+  activeStaff: number;
+  totalMonthlyPayroll: number;
+  paidAmount: number;
+  pendingAmount: number;
+  totalBonus: number;
+  totalDeduction: number;
+  outstandingAdvances: number;
+  outstandingLoans: number;
+}
+
+// ============================================================================
+// STEP 14: FIELD SALES TRACKING SYSTEM TYPES
+// ============================================================================
+
+export type LocationReadiness = 
+  | 'checking' 
+  | 'ready' 
+  | 'permission_required' 
+  | 'permission_denied' 
+  | 'gps_unavailable' 
+  | 'weak_accuracy' 
+  | 'stale' 
+  | 'unsupported';
+
+export type FieldDutyStatus = 'active' | 'ended' | 'auto_closed';
+
+export interface FieldDutySession {
+  id: string;
+  sessionId: string;
+  userId: string;
+  userLoginId: string;
+  userName: string;
+  territory?: string | null;
+  assignedArea?: string | null;
+  status: FieldDutyStatus;
+  startedAt: string;
+  endedAt?: string | null;
+  startLatitude?: number | null;
+  startLongitude?: number | null;
+  lastLatitude?: number | null;
+  lastLongitude?: number | null;
+  lastLocationUpdateAt?: string | null;
+  batteryLevel?: number | null;
+  gpsAccuracyMeters?: number | null;
+  totalVisitsCompleted: number;
+  totalOrdersBooked: number;
+  totalOrdersAmountBDT: number;
+  totalPaymentsCollectedBDT: number;
+  totalDistanceKm: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GpsLocationPing {
+  id: string;
+  pingId: string;
+  sessionId: string;
+  userId: string;
+  userName: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  speed?: number | null;
+  heading?: number | null;
+  altitude?: number | null;
+  timestamp: string;
+  batteryLevel?: number | null;
+  isCharging?: boolean | null;
+  networkOnline?: boolean | null;
+}
+
+export type CustomerVisitOutcome = 'order_booked' | 'payment_collected' | 'no_sale' | 'follow_up';
+
+export interface CustomerVisit {
+  id: string;
+  visitId: string;
+  sessionId: string;
+  userId: string;
+  userName: string;
+  customerId: string;
+  shopName: string;
+  ownerName: string;
+  checkInTime: string;
+  checkInLatitude?: number | null;
+  checkInLongitude?: number | null;
+  checkInAccuracyMeters?: number | null;
+  checkOutTime?: string | null;
+  checkOutLatitude?: number | null;
+  checkOutLongitude?: number | null;
+  checkOutAccuracyMeters?: number | null;
+  durationMinutes?: number | null;
+  visitOutcome?: CustomerVisitOutcome | null;
+  notes?: string | null;
+  orderId?: string | null;
+  paymentId?: string | null;
+  distanceFromShopMeters?: number | null;
+  isGpsVerified?: boolean;
+  verificationStatus?: 'verified' | 'rejected' | 'unverified';
+  rejectionReason?: string | null;
+}
+
+
 

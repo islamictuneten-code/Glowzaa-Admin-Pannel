@@ -15,8 +15,9 @@ service cloud.firestore {
     // Helper function to check if user is Admin
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email == 'rakibseohub@gmail.com' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        request.auth.token.email in ['rakibseohub@gmail.com', 'admin@glowzaa.com'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -222,5 +223,80 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Payroll & HR Collections rules: Authenticated staff can read payroll records (payslips, salary structures, payment logs); Admin has full write access
+    match /staffSalaryProfiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /monthlyPayrolls/{payrollId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /salaryPayments/{paymentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /staffLoans/{loanId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /payrollAdjustments/{adjId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ========================================================================
+    // FIELD SALES TRACKING SYSTEM COLLECTIONS (STEP 14)
+    // ========================================================================
+
+    // Field Duty Sessions: All authenticated staff can read; Sales staff & Admin can create and update sessions
+    match /field_duty_sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isAdmin() || isSales() || request.resource.data.userId == request.auth.uid) && request.resource.data.status == 'active';
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          resource.data.userId == request.auth.uid && 
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.sessionId == resource.data.sessionId
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Field Location Pings: All authenticated staff can read; Sales staff & Admin can create their location pings; Pings cannot be updated or deleted by staff
+    match /field_location_pings/{pingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.latitude >= -90.0 && request.resource.data.latitude <= 90.0 &&
+          request.resource.data.longitude >= -180.0 && request.resource.data.longitude <= 180.0 &&
+          request.resource.data.accuracy >= 0.0
+        )
+      );
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Customer Visits: All authenticated staff can read visits; Sales staff & Admin can create and update their visits; Ownership fields are immutable
+    match /customer_visits/{visitId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isAdmin() || isSales() || request.resource.data.userId == request.auth.uid);
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          resource.data.userId == request.auth.uid && 
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.sessionId == resource.data.sessionId &&
+          request.resource.data.customerId == resource.data.customerId
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
   }
 }
+

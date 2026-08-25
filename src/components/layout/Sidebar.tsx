@@ -29,7 +29,8 @@ import {
   Calculator,
   LogOut,
   ShieldCheck,
-  Building2
+  Building2,
+  MapPin
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -76,6 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const adminNavItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'field_tracking', label: 'Field Sales Tracking', icon: <MapPin className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'products', label: 'Products', icon: <Package className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <Layers className="w-4 h-4" /> },
     { id: 'inventory', label: 'Inventory', icon: <Boxes className="w-4 h-4" />, badge: lowStockCount > 0 ? `${lowStockCount} alert` : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
@@ -84,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'packing', label: 'Packing / Warehouse', icon: <Boxes className="w-4 h-4" />, badge: packingOrdersCount > 0 ? packingOrdersCount : undefined, badgeColor: 'bg-teal-100 text-teal-800' },
     { id: 'purchases', label: 'Purchase / Stock In', icon: <ShoppingBag className="w-4 h-4" /> },
     { id: 'expenses', label: 'Operating Expenses', icon: <Banknote className="w-4 h-4" />, badge: pendingExpensesCount > 0 ? pendingExpensesCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
+    { id: 'payroll', label: 'Staff HR & Payroll', icon: <Calculator className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'staff_management', label: 'Staff / User Accounts', icon: <ShieldCheck className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'sales_staff', label: 'Sales Staff', icon: <UserCheck className="w-4 h-4" /> },
     { id: 'delivery_staff', label: 'Delivery Staff', icon: <Truck className="w-4 h-4" /> },
@@ -108,6 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'customer_due', label: 'Customer Due', icon: <AlertCircle className="w-4 h-4" />, badge: overdueCustomersCount > 0 ? overdueCustomersCount : undefined, badgeColor: 'bg-red-100 text-red-800' },
     { id: 'sales_history', label: 'Sales History', icon: <History className="w-4 h-4" /> },
     { id: 'sales_summary', label: 'Sales Summary', icon: <FileSpreadsheet className="w-4 h-4" /> },
+    { id: 'my_salary', label: 'My Salary & Slips', icon: <Calculator className="w-4 h-4 text-[#087F7A]" /> },
   ];
 
   const deliveryNavItems: { id: DeliveryTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
@@ -120,6 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'due_collection', label: 'Due Collection', icon: <Banknote className="w-4 h-4" /> },
     { id: 'money_collected', label: 'Money Collected', icon: <Receipt className="w-4 h-4" />, badge: formatBDT(currentDeliveryUser?.cashInHand || 0), badgeColor: 'bg-emerald-100 text-emerald-800' },
     { id: 'collection_history', label: 'Collection History', icon: <History className="w-4 h-4" /> },
+    { id: 'my_salary', label: 'My Salary & Slips', icon: <Calculator className="w-4 h-4 text-[#087F7A]" /> },
   ];
 
   const handleTabClick = (id: string) => {

@@ -35,6 +35,8 @@ import {
   logoutAllDevicesInFirestore, 
   revokeDeviceSessionInFirestore 
 } from '../services/staffAuthService';
+import { stopWatchingLocation } from '../services/locationService';
+import { endActiveFieldDutySessionOnLogout } from '../services/firestoreService';
 
 interface RegisterData {
   name: string;
@@ -652,6 +654,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setIsLoading(true);
     try {
+      // Immediately stop any active browser GPS watching
+      stopWatchingLocation();
+
+      // If sales staff, auto-end active field duty session
+      if (currentUser?.uid) {
+        await endActiveFieldDutySessionOnLogout(currentUser).catch(() => {});
+      }
+
       if (currentUser?.uid && currentSessionId) {
         await revokeDeviceSessionInFirestore(currentUser.uid, currentSessionId, currentUser).catch(() => {});
       }

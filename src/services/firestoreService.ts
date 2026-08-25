@@ -41,7 +41,12 @@ import {
   PaymentMethodOption,
   PaymentTypeOption,
   LedgerTransactionType,
-  CompanySettings
+  CompanySettings,
+  FieldDutySession,
+  GpsLocationPing,
+  CustomerVisit,
+  FieldDutyStatus,
+  CustomerVisitOutcome
 } from '../types';
 
 export enum OperationType {
@@ -1044,7 +1049,13 @@ export function subscribeCustomers(
         createdAt: data.createdAt || new Date().toISOString(),
         updatedAt: data.updatedAt || '',
         createdBy: data.createdBy || '',
-        lastOrderDate: data.lastOrderDate || ''
+        lastOrderDate: data.lastOrderDate || '',
+        latitude: typeof data.latitude === 'number' ? data.latitude : (data.latitude ? Number(data.latitude) : null),
+        longitude: typeof data.longitude === 'number' ? data.longitude : (data.longitude ? Number(data.longitude) : null),
+        locationAccuracyMeters: typeof data.locationAccuracyMeters === 'number' ? data.locationAccuracyMeters : (data.locationAccuracyMeters ? Number(data.locationAccuracyMeters) : null),
+        isGpsVerified: Boolean(data.isGpsVerified || (data.latitude && data.longitude)),
+        locationCapturedAt: data.locationCapturedAt || null,
+        locationCapturedByUserId: data.locationCapturedByUserId || null
       });
     });
     onUpdate(list);
@@ -1267,6 +1278,12 @@ export async function createCustomerInFirestore(
       creditLimit: Number(data.creditLimit) || 100000,
       paymentTermDays: Number(data.paymentTermDays) || 15,
       tradeLicenseNo: data.tradeLicenseNo?.trim() || '',
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      locationAccuracyMeters: data.locationAccuracyMeters ?? null,
+      isGpsVerified: data.isGpsVerified ?? false,
+      locationCapturedAt: data.locationCapturedAt ?? (data.latitude ? now : null),
+      locationCapturedByUserId: data.locationCapturedByUserId ?? (data.latitude ? currentUser.uid : null),
       status: data.status || 'active',
       // Financial summaries cannot be set manually; default to 0
       totalPurchase: 0,
@@ -4999,5 +5016,1013 @@ export function subscribeCompanySettings(onUpdate: (settings: CompanySettings | 
     }
   });
 }
+
+// ============================================================================
+// STEP 14: FIELD SALES TRACKING SERVICE FUNCTIONS (PHASE 2 FOUNDATION)
+// ============================================================================
+
+/**
+ * Safely writes an audit log to /audit_logs collection.
+ */
+export async function writeFieldDutyAuditLog(logData: {
+  action: string;
+  targetUserId: string;
+  targetUserLoginId?: string;
+  targetUserName?: string;
+  targetRole?: string;
+  performedByUserId: string;
+  performedByUserName?: string;
+  timestamp?: string;
+  sessionId?: string;
+  reason?: string;
+  details?: string;
+}): Promise<void> {
+  try {
+    const cleanData = cleanUndefined({
+      action: logData.action,
+      targetUserId: logData.targetUserId,
+      targetUserLoginId: logData.targetUserLoginId || '',
+      targetUserName: logData.targetUserName || 'Staff User',
+      targetRole: logData.targetRole || 'sales',
+      performedByUserId: logData.performedByUserId,
+      performedByUserName: logData.performedByUserName || 'Staff User',
+      timestamp: logData.timestamp || new Date().toISOString(),
+      sessionId: logData.sessionId || null,
+      reason: logData.reason || null,
+      details: logData.details || ''
+    });
+    const newDocRef = doc(collection(db, 'audit_logs'));
+    await setDoc(newDocRef, cleanData, { merge: true });
+  } catch (err) {
+    console.warn('Field Duty audit log notice:', err);
+  }
+}
+
+/**
+ * Starts a new Field Duty session for an authenticated Sales Staff member.
+ * Ensures only ONE active session exists per user at any time.
+ */
+export async function startFieldDutySession(
+  currentUser: AuthUser,
+  initialLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    batteryLevel?: number;
+  }
+): Promise<{ success: boolean; session?: FieldDutySession; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (currentUser.role !== 'sales' && currentUser.role !== 'admin') {
+      throw new Error('Only Sales Staff can start Field Duty sessions.');
+    }
+
+    const userId = currentUser.uid;
+
+    // Check if an active session already exists for this user
+    const activeQuery = query(
+      collection(db, 'field_duty_sessions'),
+      where('userId', '==', userId),
+      where('status', '==', 'active'),
+      limit(1)
+    );
+    const activeSnap = await getDocs(activeQuery);
+    if (!activeSnap.empty) {
+      const existingSession = { id: activeSnap.docs[0].id, ...activeSnap.docs[0].data() } as FieldDutySession;
+      return {
+        success: false,
+        error: 'An active field duty session already exists for this user.',
+        session: existingSession
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    const sessionRef = doc(collection(db, 'field_duty_sessions'));
+    const sessionId = sessionRef.id;
+
+    const sessionData: FieldDutySession = {
+      id: sessionId,
+      sessionId: sessionId,
+      userId: userId,
+      userLoginId: currentUser.loginId || currentUser.email || '',
+      userName: currentUser.name || 'Sales Staff',
+      territory: currentUser.territory || null,
+      assignedArea: currentUser.assignedArea || null,
+      status: 'active',
+      startedAt: nowIso,
+      endedAt: null,
+      startLatitude: initialLocation?.latitude ?? null,
+      startLongitude: initialLocation?.longitude ?? null,
+      lastLatitude: initialLocation?.latitude ?? null,
+      lastLongitude: initialLocation?.longitude ?? null,
+      lastLocationUpdateAt: initialLocation ? nowIso : null,
+      batteryLevel: initialLocation?.batteryLevel ?? null,
+      gpsAccuracyMeters: initialLocation?.accuracy ?? null,
+      totalVisitsCompleted: 0,
+      totalOrdersBooked: 0,
+      totalOrdersAmountBDT: 0,
+      totalPaymentsCollectedBDT: 0,
+      totalDistanceKm: 0,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    await setDoc(sessionRef, cleanUndefined(sessionData));
+
+    // Audit log (FIELD_DUTY_STARTED)
+    await writeFieldDutyAuditLog({
+      action: 'FIELD_DUTY_STARTED',
+      targetUserId: userId,
+      targetUserLoginId: currentUser.loginId || currentUser.email || '',
+      targetUserName: currentUser.name || 'Sales Staff',
+      targetRole: currentUser.role,
+      performedByUserId: userId,
+      performedByUserName: currentUser.name || 'Sales Staff',
+      timestamp: nowIso,
+      details: `Field Duty session started (${sessionId})`
+    });
+
+    return { success: true, session: sessionData };
+  } catch (err: any) {
+    console.error('Error starting field duty session:', err);
+    return { success: false, error: err.message || 'Failed to start field duty session.' };
+  }
+}
+
+/**
+ * Phase 3: Automatically retrieves an existing active Field Duty session or creates a new one
+ * when a Sales Staff member initiates a field activity (e.g. Customer Shop Check-In).
+ * Prevents multiple active sessions and auto-closes stale sessions (> 16 hours).
+ */
+export async function getOrCreateActiveFieldDutySession(
+  currentUser: AuthUser,
+  initialLocation?: {
+    latitude?: number | null;
+    longitude?: number | null;
+    accuracy?: number | null;
+    batteryLevel?: number | null;
+  }
+): Promise<{ success: boolean; session?: FieldDutySession; isNewlyCreated?: boolean; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (currentUser.role !== 'sales' && currentUser.role !== 'admin') {
+      throw new Error('Only Sales Staff can have active Field Duty sessions.');
+    }
+
+    const userId = currentUser.uid;
+
+    // Check for existing active session
+    const activeQuery = query(
+      collection(db, 'field_duty_sessions'),
+      where('userId', '==', userId),
+      where('status', '==', 'active'),
+      limit(1)
+    );
+    const activeSnap = await getDocs(activeQuery);
+
+    if (!activeSnap.empty) {
+      const docSnap = activeSnap.docs[0];
+      const existingSession = { id: docSnap.id, ...docSnap.data() } as FieldDutySession;
+
+      // Check if session is stale (started > 16 hours ago)
+      const startedMs = new Date(existingSession.startedAt).getTime();
+      const ageHours = (Date.now() - startedMs) / (1000 * 60 * 60);
+
+      if (ageHours > 16) {
+        // Auto-close stale session
+        const nowIso = new Date().toISOString();
+        await updateDoc(doc(db, 'field_duty_sessions', docSnap.id), {
+          status: 'auto_closed',
+          endedAt: nowIso,
+          updatedAt: nowIso
+        });
+      } else {
+        // Active session is still valid! If initial location is passed, update last position
+        if (initialLocation?.latitude && initialLocation?.longitude) {
+          const nowIso = new Date().toISOString();
+          await updateDoc(doc(db, 'field_duty_sessions', docSnap.id), {
+            lastLatitude: initialLocation.latitude,
+            lastLongitude: initialLocation.longitude,
+            lastLocationUpdateAt: nowIso,
+            gpsAccuracyMeters: initialLocation.accuracy ?? existingSession.gpsAccuracyMeters,
+            batteryLevel: initialLocation.batteryLevel ?? existingSession.batteryLevel,
+            updatedAt: nowIso
+          }).catch(() => {});
+        }
+        return { success: true, session: existingSession, isNewlyCreated: false };
+      }
+    }
+
+    // No valid active session exists; create a new one automatically
+    const nowIso = new Date().toISOString();
+    const sessionRef = doc(collection(db, 'field_duty_sessions'));
+    const sessionId = sessionRef.id;
+
+    const sessionData: FieldDutySession = {
+      id: sessionId,
+      sessionId: sessionId,
+      userId: userId,
+      userLoginId: currentUser.loginId || currentUser.email || '',
+      userName: currentUser.name || 'Sales Staff',
+      territory: currentUser.territory || null,
+      assignedArea: currentUser.assignedArea || null,
+      status: 'active',
+      startedAt: nowIso,
+      endedAt: null,
+      startLatitude: initialLocation?.latitude ?? null,
+      startLongitude: initialLocation?.longitude ?? null,
+      lastLatitude: initialLocation?.latitude ?? null,
+      lastLongitude: initialLocation?.longitude ?? null,
+      lastLocationUpdateAt: initialLocation?.latitude ? nowIso : null,
+      batteryLevel: initialLocation?.batteryLevel ?? null,
+      gpsAccuracyMeters: initialLocation?.accuracy ?? null,
+      totalVisitsCompleted: 0,
+      totalOrdersBooked: 0,
+      totalOrdersAmountBDT: 0,
+      totalPaymentsCollectedBDT: 0,
+      totalDistanceKm: 0,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    await setDoc(sessionRef, cleanUndefined(sessionData));
+
+    // Audit log (FIELD_DUTY_STARTED - Automatic on Check-In)
+    await writeFieldDutyAuditLog({
+      action: 'FIELD_DUTY_STARTED',
+      targetUserId: userId,
+      targetUserLoginId: currentUser.loginId || currentUser.email || '',
+      targetUserName: currentUser.name || 'Sales Staff',
+      targetRole: currentUser.role,
+      performedByUserId: userId,
+      performedByUserName: currentUser.name || 'Sales Staff',
+      timestamp: nowIso,
+      details: `Field Duty session automatically started upon shop check-in (${sessionId})`
+    });
+
+    return { success: true, session: sessionData, isNewlyCreated: true };
+  } catch (err: any) {
+    console.error('Error in getOrCreateActiveFieldDutySession:', err);
+    return { success: false, error: err.message || 'Failed to initialize field duty session.' };
+  }
+}
+
+/**
+ * Phase 3: Automatically ends any active field duty session and unfinished customer visits when the user logs out.
+ */
+export async function endActiveFieldDutySessionOnLogout(currentUser: AuthUser): Promise<void> {
+  try {
+    if (!currentUser || !currentUser.uid) return;
+    const activeSession = await getActiveFieldDutySession(currentUser.uid);
+    if (!activeSession) return;
+
+    const nowIso = new Date().toISOString();
+
+    // Check for open customer visit and close it
+    const activeVisit = await getActiveCustomerVisit(currentUser.uid);
+    if (activeVisit) {
+      await updateDoc(doc(db, 'customer_visits', activeVisit.id), {
+        checkOutTime: nowIso,
+        visitOutcome: activeVisit.visitOutcome || 'follow_up',
+        notes: activeVisit.notes ? `${activeVisit.notes} (Auto-closed on sign out)` : 'Auto-closed on sign out'
+      }).catch(() => {});
+    }
+
+    // End active session
+    await updateDoc(doc(db, 'field_duty_sessions', activeSession.id), {
+      status: 'ended',
+      endedAt: nowIso,
+      updatedAt: nowIso
+    });
+
+    await writeFieldDutyAuditLog({
+      action: 'FIELD_DUTY_ENDED',
+      targetUserId: currentUser.uid,
+      targetUserLoginId: currentUser.loginId || currentUser.email || '',
+      targetUserName: currentUser.name || 'Sales Staff',
+      targetRole: 'sales',
+      performedByUserId: currentUser.uid,
+      performedByUserName: currentUser.name || 'Sales Staff',
+      timestamp: nowIso,
+      details: `Field Duty session ended automatically on user sign out (${activeSession.sessionId})`
+    });
+  } catch (err) {
+    console.warn('Could not auto-close field duty on logout:', err);
+  }
+}
+
+/**
+ * Ends an active Field Duty session for the authenticated Sales Staff member.
+ */
+export async function endFieldDutySession(
+  currentUser: AuthUser,
+  sessionId: string,
+  summaryStats?: { totalDistanceKm?: number }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (!sessionId) {
+      throw new Error('Session ID is required.');
+    }
+
+    const sessionRef = doc(db, 'field_duty_sessions', sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+
+    if (!sessionSnap.exists()) {
+      throw new Error('Field duty session not found.');
+    }
+
+    const sessionData = sessionSnap.data() as FieldDutySession;
+
+    // Verify ownership: only the owner sales staff (or admin) can end the session
+    if (sessionData.userId !== currentUser.uid && currentUser.role !== 'admin') {
+      throw new Error('Unauthorized: You can only end your own field duty session.');
+    }
+
+    if (sessionData.status !== 'active') {
+      throw new Error('Session is not active or has already ended.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatePayload: Partial<FieldDutySession> = {
+      status: 'ended',
+      endedAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    if (summaryStats?.totalDistanceKm !== undefined && summaryStats.totalDistanceKm > 0) {
+      updatePayload.totalDistanceKm = summaryStats.totalDistanceKm;
+    }
+
+    await updateDoc(sessionRef, cleanUndefined(updatePayload));
+
+    // Audit log (FIELD_DUTY_ENDED)
+    await writeFieldDutyAuditLog({
+      action: 'FIELD_DUTY_ENDED',
+      targetUserId: sessionData.userId,
+      targetUserLoginId: sessionData.userLoginId,
+      targetUserName: sessionData.userName,
+      targetRole: 'sales',
+      performedByUserId: currentUser.uid,
+      performedByUserName: currentUser.name || 'Sales Staff',
+      timestamp: nowIso,
+      details: `Field Duty session ended (${sessionId})`
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error ending field duty session:', err);
+    return { success: false, error: err.message || 'Failed to end field duty session.' };
+  }
+}
+
+/**
+ * Admin action: Force ends an active Field Duty session.
+ * Updates session status to 'auto_closed', sets endedAt, and writes an audit log to /audit_logs.
+ */
+export async function forceEndFieldDutySession(
+  currentUser: AuthUser,
+  sessionId: string,
+  reason: string = 'Administrative override'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (currentUser.role !== 'admin') {
+      throw new Error('Unauthorized: Only administrators can force-end field duty sessions.');
+    }
+    if (!sessionId) {
+      throw new Error('Session ID is required.');
+    }
+
+    const sessionRef = doc(db, 'field_duty_sessions', sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (!sessionSnap.exists()) {
+      throw new Error('Field duty session not found.');
+    }
+
+    const sessionData = sessionSnap.data() as FieldDutySession;
+    if (sessionData.status !== 'active') {
+      throw new Error('Session is not active or has already ended.');
+    }
+
+    const nowIso = new Date().toISOString();
+    await updateDoc(sessionRef, {
+      status: 'auto_closed',
+      endedAt: nowIso,
+      updatedAt: nowIso
+    });
+
+    // Write audit log to /audit_logs
+    await writeFieldDutyAuditLog({
+      action: 'FIELD_DUTY_FORCE_ENDED',
+      targetUserId: sessionData.userId,
+      targetUserLoginId: sessionData.userLoginId,
+      targetUserName: sessionData.userName,
+      targetRole: 'sales',
+      performedByUserId: currentUser.uid,
+      performedByUserName: currentUser.name || 'Administrator',
+      timestamp: nowIso,
+      sessionId: sessionId,
+      reason: reason,
+      details: `Field Duty session force-ended by admin (${sessionId}). Reason: ${reason}`
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error force-ending field duty session:', err);
+    return { success: false, error: err.message || 'Failed to force-end field duty session.' };
+  }
+}
+
+/**
+ * Fetches the currently active Field Duty session for a given user ID, or null if none.
+ */
+export async function getActiveFieldDutySession(userId: string): Promise<FieldDutySession | null> {
+  try {
+    if (!userId) return null;
+    const q = query(
+      collection(db, 'field_duty_sessions'),
+      where('userId', '==', userId),
+      where('status', '==', 'active'),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return { id: snap.docs[0].id, ...snap.docs[0].data() } as FieldDutySession;
+  } catch (err) {
+    console.error('Error fetching active field duty session:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetches a single Field Duty session by document ID.
+ */
+export async function getFieldDutySession(sessionId: string): Promise<FieldDutySession | null> {
+  try {
+    if (!sessionId) return null;
+    const snap = await getDoc(doc(db, 'field_duty_sessions', sessionId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as FieldDutySession;
+  } catch (err) {
+    console.error('Error fetching field duty session:', err);
+    return null;
+  }
+}
+
+/**
+ * Logs a periodic GPS location ping and atomically updates the session's latest location.
+ */
+export async function createLocationPing(
+  currentUser: AuthUser,
+  pingData: {
+    sessionId: string;
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    speed?: number | null;
+    heading?: number | null;
+    altitude?: number | null;
+    batteryLevel?: number | null;
+    isCharging?: boolean | null;
+    networkOnline?: boolean | null;
+  }
+): Promise<{ success: boolean; pingId?: string; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (currentUser.role !== 'sales' && currentUser.role !== 'admin') {
+      throw new Error('Only Sales Staff can submit location pings.');
+    }
+    if (!pingData.sessionId) {
+      throw new Error('Session ID is required.');
+    }
+
+    // Validate GPS coordinate bounds
+    if (
+      typeof pingData.latitude !== 'number' ||
+      pingData.latitude < -90 ||
+      pingData.latitude > 90 ||
+      typeof pingData.longitude !== 'number' ||
+      pingData.longitude < -180 ||
+      pingData.longitude > 180
+    ) {
+      throw new Error('Invalid GPS latitude/longitude coordinates.');
+    }
+    if (typeof pingData.accuracy !== 'number' || pingData.accuracy < 0) {
+      throw new Error('Invalid GPS accuracy value.');
+    }
+
+    // Verify session exists, belongs to user, and is active
+    const sessionRef = doc(db, 'field_duty_sessions', pingData.sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (!sessionSnap.exists()) {
+      throw new Error('Referenced field duty session does not exist.');
+    }
+    const session = sessionSnap.data() as FieldDutySession;
+    if (session.userId !== currentUser.uid && currentUser.role !== 'admin') {
+      throw new Error('Unauthorized: Ping user does not match session owner.');
+    }
+    if (session.status !== 'active') {
+      throw new Error('Cannot log location ping to an ended or inactive session.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const pingRef = doc(collection(db, 'field_location_pings'));
+    const pingId = pingRef.id;
+
+    const pingDoc: GpsLocationPing = {
+      id: pingId,
+      pingId: pingId,
+      sessionId: pingData.sessionId,
+      userId: currentUser.uid,
+      userName: currentUser.name || 'Sales Staff',
+      latitude: pingData.latitude,
+      longitude: pingData.longitude,
+      accuracy: pingData.accuracy,
+      speed: pingData.speed ?? null,
+      heading: pingData.heading ?? null,
+      altitude: pingData.altitude ?? null,
+      timestamp: nowIso,
+      batteryLevel: pingData.batteryLevel ?? null,
+      isCharging: pingData.isCharging ?? null,
+      networkOnline: pingData.networkOnline ?? true
+    };
+
+    // Atomic batch write: write location ping + update session latest position
+    const batch = writeBatch(db);
+    batch.set(pingRef, cleanUndefined(pingDoc));
+    batch.update(sessionRef, cleanUndefined({
+      lastLatitude: pingData.latitude,
+      lastLongitude: pingData.longitude,
+      lastLocationUpdateAt: nowIso,
+      gpsAccuracyMeters: pingData.accuracy,
+      batteryLevel: pingData.batteryLevel ?? session.batteryLevel ?? null,
+      updatedAt: nowIso
+    }));
+
+    await batch.commit();
+    return { success: true, pingId };
+  } catch (err: any) {
+    console.error('Error creating location ping:', err);
+    return { success: false, error: err.message || 'Failed to create location ping.' };
+  }
+}
+
+/**
+ * Creates a new customer visit check-in record for an active session.
+ */
+export async function createCustomerVisit(
+  currentUser: AuthUser,
+  visitData: {
+    sessionId: string;
+    customerId: string;
+    shopName?: string;
+    ownerName?: string;
+    checkInLatitude?: number | null;
+    checkInLongitude?: number | null;
+    checkInAccuracyMeters?: number | null;
+    distanceFromShopMeters?: number | null;
+    isGpsVerified?: boolean;
+    verificationStatus?: 'verified' | 'rejected' | 'unverified';
+    rejectionReason?: string | null;
+    notes?: string | null;
+  }
+): Promise<{ success: boolean; visit?: CustomerVisit; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (currentUser.role !== 'sales' && currentUser.role !== 'admin') {
+      throw new Error('Only Sales Staff can create customer visits.');
+    }
+    if (!visitData.sessionId) {
+      throw new Error('Session ID is required.');
+    }
+    if (!visitData.customerId) {
+      throw new Error('Customer ID is required.');
+    }
+
+    // Verify session
+    const sessionRef = doc(db, 'field_duty_sessions', visitData.sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (!sessionSnap.exists()) {
+      throw new Error('Referenced field duty session does not exist.');
+    }
+    const session = sessionSnap.data() as FieldDutySession;
+    if (session.userId !== currentUser.uid && currentUser.role !== 'admin') {
+      throw new Error('Unauthorized: Visit user does not match session owner.');
+    }
+    if (session.status !== 'active') {
+      throw new Error('Cannot check in to a customer visit with an inactive session.');
+    }
+
+    // Verify customer exists
+    const customerRef = doc(db, 'customers', visitData.customerId);
+    const customerSnap = await getDoc(customerRef);
+    if (!customerSnap.exists()) {
+      throw new Error('Customer does not exist.');
+    }
+    const customer = customerSnap.data() as Customer;
+
+    const nowIso = new Date().toISOString();
+    const visitRef = doc(collection(db, 'customer_visits'));
+    const visitId = visitRef.id;
+
+    const visitDoc: CustomerVisit = {
+      id: visitId,
+      visitId: visitId,
+      sessionId: visitData.sessionId,
+      userId: currentUser.uid,
+      userName: currentUser.name || 'Sales Staff',
+      customerId: visitData.customerId,
+      shopName: visitData.shopName || customer.shopName || '',
+      ownerName: visitData.ownerName || customer.ownerName || '',
+      checkInTime: nowIso,
+      checkInLatitude: visitData.checkInLatitude ?? null,
+      checkInLongitude: visitData.checkInLongitude ?? null,
+      checkInAccuracyMeters: visitData.checkInAccuracyMeters ?? null,
+      checkOutTime: null,
+      checkOutLatitude: null,
+      checkOutLongitude: null,
+      checkOutAccuracyMeters: null,
+      durationMinutes: null,
+      visitOutcome: null,
+      notes: visitData.notes ?? null,
+      orderId: null,
+      paymentId: null,
+      distanceFromShopMeters: visitData.distanceFromShopMeters ?? null,
+      isGpsVerified: visitData.isGpsVerified ?? (visitData.verificationStatus === 'verified'),
+      verificationStatus: visitData.verificationStatus ?? (visitData.isGpsVerified ? 'verified' : 'unverified'),
+      rejectionReason: visitData.rejectionReason ?? null
+    };
+
+    await setDoc(visitRef, cleanUndefined(visitDoc));
+    return { success: true, visit: visitDoc };
+  } catch (err: any) {
+    console.error('Error creating customer visit:', err);
+    return { success: false, error: err.message || 'Failed to create customer visit.' };
+  }
+}
+
+/**
+ * Updates an existing customer visit (e.g. check-out, visit outcome, duration, notes, orderId, paymentId).
+ * Prevents mutation of ownership fields (userId, sessionId, customerId).
+ * Atomically increments completed visits counter on the session at checkout.
+ */
+export async function updateCustomerVisit(
+  currentUser: AuthUser,
+  visitId: string,
+  updateData: {
+    checkOutLatitude?: number | null;
+    checkOutLongitude?: number | null;
+    checkOutAccuracyMeters?: number | null;
+    checkOutTime?: string;
+    durationMinutes?: number | null;
+    visitOutcome?: CustomerVisitOutcome | null;
+    notes?: string | null;
+    orderId?: string | null;
+    paymentId?: string | null;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (!visitId) {
+      throw new Error('Visit ID is required.');
+    }
+
+    const visitRef = doc(db, 'customer_visits', visitId);
+    const visitSnap = await getDoc(visitRef);
+    if (!visitSnap.exists()) {
+      throw new Error('Customer visit record not found.');
+    }
+    const visit = visitSnap.data() as CustomerVisit;
+
+    if (visit.userId !== currentUser.uid && currentUser.role !== 'admin') {
+      throw new Error('Unauthorized: You can only update your own customer visit.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const checkOutTime = updateData.checkOutTime || nowIso;
+    const isFirstCheckout = !visit.checkOutTime && Boolean(checkOutTime);
+
+    let calculatedDuration = updateData.durationMinutes;
+    if (calculatedDuration === undefined && visit.checkInTime) {
+      const checkInMs = new Date(visit.checkInTime).getTime();
+      const checkOutMs = new Date(checkOutTime).getTime();
+      if (!isNaN(checkInMs) && !isNaN(checkOutMs) && checkOutMs >= checkInMs) {
+        calculatedDuration = Math.round((checkOutMs - checkInMs) / 60000);
+      }
+    }
+
+    const updatePayload: Partial<CustomerVisit> = {
+      checkOutTime: checkOutTime,
+      checkOutLatitude: updateData.checkOutLatitude !== undefined ? updateData.checkOutLatitude : visit.checkOutLatitude,
+      checkOutLongitude: updateData.checkOutLongitude !== undefined ? updateData.checkOutLongitude : visit.checkOutLongitude,
+      checkOutAccuracyMeters: updateData.checkOutAccuracyMeters !== undefined ? updateData.checkOutAccuracyMeters : visit.checkOutAccuracyMeters,
+      durationMinutes: calculatedDuration !== undefined ? calculatedDuration : visit.durationMinutes,
+      visitOutcome: updateData.visitOutcome !== undefined ? updateData.visitOutcome : visit.visitOutcome,
+      notes: updateData.notes !== undefined ? updateData.notes : visit.notes,
+      orderId: updateData.orderId !== undefined ? updateData.orderId : visit.orderId,
+      paymentId: updateData.paymentId !== undefined ? updateData.paymentId : visit.paymentId
+    };
+
+    await updateDoc(visitRef, cleanUndefined(updatePayload));
+
+    // If this is the initial checkout, update the parent session's completed counter
+    if (isFirstCheckout && visit.sessionId) {
+      try {
+        const sessionRef = doc(db, 'field_duty_sessions', visit.sessionId);
+        const sessionSnap = await getDoc(sessionRef);
+        if (sessionSnap.exists()) {
+          const sessData = sessionSnap.data() as FieldDutySession;
+          const sessionUpdates: Partial<FieldDutySession> = {
+            totalVisitsCompleted: (sessData.totalVisitsCompleted || 0) + 1,
+            updatedAt: nowIso
+          };
+          if (updateData.visitOutcome === 'order_booked' || updateData.orderId) {
+            sessionUpdates.totalOrdersBooked = (sessData.totalOrdersBooked || 0) + 1;
+          }
+          await updateDoc(sessionRef, cleanUndefined(sessionUpdates));
+        }
+      } catch (sessErr) {
+        console.warn('Could not increment session visits completed count:', sessErr);
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating customer visit:', err);
+    return { success: false, error: err.message || 'Failed to update customer visit.' };
+  }
+}
+
+/**
+ * Fetches all customer visits recorded for a specific Field Duty session ordered chronologically.
+ */
+export async function getCustomerVisitsForSession(sessionId: string): Promise<CustomerVisit[]> {
+  try {
+    if (!sessionId) return [];
+    try {
+      const q = query(
+        collection(db, 'customer_visits'),
+        where('sessionId', '==', sessionId),
+        orderBy('checkInTime', 'asc')
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as CustomerVisit));
+    } catch (orderErr) {
+      console.warn('Error querying customer visits with orderBy, using fallback:', orderErr);
+      const fallbackQ = query(
+        collection(db, 'customer_visits'),
+        where('sessionId', '==', sessionId)
+      );
+      const snap = await getDocs(fallbackQ);
+      return snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as CustomerVisit))
+        .sort((a, b) => (a.checkInTime || '').localeCompare(b.checkInTime || ''));
+    }
+  } catch (err) {
+    console.error('Error fetching customer visits for session:', err);
+    return [];
+  }
+}
+
+/**
+ * Finds any currently active (open/unfinished) customer visit for a sales staff user.
+ */
+export async function getActiveCustomerVisit(userId: string): Promise<CustomerVisit | null> {
+  try {
+    if (!userId) return null;
+    const q = query(
+      collection(db, 'customer_visits'),
+      where('userId', '==', userId),
+      where('checkOutTime', '==', null),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const docData = snap.docs[0];
+      return { id: docData.id, ...docData.data() } as CustomerVisit;
+    }
+    return null;
+  } catch (err) {
+    // Fallback in case of composite index delay
+    try {
+      const fallbackQ = query(
+        collection(db, 'customer_visits'),
+        where('userId', '==', userId),
+        limit(20)
+      );
+      const snap = await getDocs(fallbackQ);
+      const active = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as CustomerVisit))
+        .find(v => !v.checkOutTime);
+      return active || null;
+    } catch (fallbackErr) {
+      console.error('Error checking active customer visit:', fallbackErr);
+      return null;
+    }
+  }
+}
+
+/**
+ * Updates a customer shop's verified GPS coordinates.
+ */
+export async function updateCustomerGpsLocation(
+  currentUser: AuthUser,
+  customerId: string,
+  latitude: number,
+  longitude: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('Authentication required.');
+    }
+    if (!customerId) {
+      throw new Error('Customer ID is required.');
+    }
+    if (typeof latitude !== 'number' || latitude < -90 || latitude > 90) {
+      throw new Error('Invalid GPS latitude.');
+    }
+    if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) {
+      throw new Error('Invalid GPS longitude.');
+    }
+
+    const customerRef = doc(db, 'customers', customerId);
+    const customerSnap = await getDoc(customerRef);
+    if (!customerSnap.exists()) {
+      throw new Error('Customer shop not found.');
+    }
+
+    const customer = customerSnap.data() as Customer;
+    // Authorize Sales Staff and Administrators to verify shop GPS coordinates
+    if (currentUser.role !== 'admin' && currentUser.role !== 'sales') {
+      throw new Error('Unauthorized: Only Sales Staff and Administrators can verify customer shop GPS coordinates.');
+    }
+
+    const updatePayload: Partial<Customer> = {
+      latitude,
+      longitude,
+      isGpsVerified: true,
+      updatedAt: new Date().toISOString()
+    };
+
+    // If customer was unassigned, assign to this sales representative on field duty
+    if (
+      currentUser.role === 'sales' &&
+      (!customer.assignedSalesUserId || customer.assignedSalesUserId === 'Unassigned' || customer.assignedSalesUserId === 'unassigned')
+    ) {
+      updatePayload.assignedSalesUserId = currentUser.staffId || currentUser.uid;
+      updatePayload.assignedSalesUserName = currentUser.name || 'Sales Staff';
+      updatePayload.assignedSalesSellerId = currentUser.staffId || currentUser.uid;
+      updatePayload.assignedSalesSellerName = currentUser.name || 'Sales Staff';
+    }
+
+    await updateDoc(customerRef, cleanUndefined(updatePayload));
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating customer GPS location:', err);
+    return { success: false, error: err.message || 'Failed to update shop GPS location.' };
+  }
+}
+
+/**
+ * Real-time onSnapshot listener for all field duty sessions (Admin Live Monitoring).
+ * Automatically updates when staff starts duty, ends duty, or sends a GPS ping.
+ */
+export function subscribeToAllFieldDutySessions(
+  callback: (sessions: FieldDutySession[]) => void,
+  onError?: (err: any) => void
+): () => void {
+  const sessionsCol = collection(db, 'field_duty_sessions');
+  const q = query(sessionsCol, orderBy('startedAt', 'desc'), limit(100));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const sessions = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as FieldDutySession));
+      callback(sessions);
+    },
+    (err) => {
+      console.warn('Field duty sessions subscription error, trying fallback:', err);
+      // Fallback query without orderBy if index is still propagating
+      const fallbackQ = query(sessionsCol, limit(100));
+      onSnapshot(
+        fallbackQ,
+        (snapshot) => {
+          const sessions = snapshot.docs
+            .map((d) => ({ id: d.id, ...(d.data() as any) } as FieldDutySession))
+            .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+          callback(sessions);
+        },
+        (fallbackErr) => {
+          console.error('Fallback subscription error:', fallbackErr);
+          if (onError) onError(fallbackErr);
+        }
+      );
+    }
+  );
+}
+
+/**
+ * Loads all location pings for a specific session to reconstruct the chronological route.
+ */
+export async function getFieldLocationPingsForSession(sessionId: string): Promise<GpsLocationPing[]> {
+  try {
+    if (!sessionId) return [];
+    const pingsCol = collection(db, 'field_location_pings');
+    const q = query(
+      pingsCol,
+      where('sessionId', '==', sessionId),
+      orderBy('timestamp', 'asc'),
+      limit(500)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as GpsLocationPing));
+  } catch (err) {
+    console.warn('Error loading location pings with orderBy, trying fallback query:', err);
+    try {
+      const fallbackQ = query(
+        collection(db, 'field_location_pings'),
+        where('sessionId', '==', sessionId),
+        limit(500)
+      );
+      const snap = await getDocs(fallbackQ);
+      return snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) } as GpsLocationPing))
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    } catch (fallbackErr) {
+      console.error('Error fetching location pings for session:', fallbackErr);
+      return [];
+    }
+  }
+}
+
+/**
+ * Loads all customer visits for a date range (for historical analysis).
+ */
+export async function getCustomerVisitsForDateRange(
+  startDateIso: string,
+  endDateIso: string,
+  userId?: string
+): Promise<CustomerVisit[]> {
+  try {
+    const visitsCol = collection(db, 'customer_visits');
+    let q;
+    if (userId) {
+      q = query(
+        visitsCol,
+        where('userId', '==', userId),
+        where('checkInTime', '>=', startDateIso),
+        where('checkInTime', '<=', endDateIso),
+        orderBy('checkInTime', 'asc')
+      );
+    } else {
+      q = query(
+        visitsCol,
+        where('checkInTime', '>=', startDateIso),
+        where('checkInTime', '<=', endDateIso),
+        orderBy('checkInTime', 'asc')
+      );
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as CustomerVisit));
+  } catch (err) {
+    console.warn('Error querying visits by date with composite index, using fallback filter:', err);
+    try {
+      const snap = await getDocs(query(collection(db, 'customer_visits'), limit(200)));
+      const startMs = new Date(startDateIso).getTime();
+      const endMs = new Date(endDateIso).getTime();
+      return snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) } as CustomerVisit))
+        .filter((v) => {
+          if (userId && v.userId !== userId) return false;
+          if (!v.checkInTime) return false;
+          const visitMs = new Date(v.checkInTime).getTime();
+          return visitMs >= startMs && visitMs <= endMs;
+        })
+        .sort((a, b) => new Date(a.checkInTime).getTime() - new Date(b.checkInTime).getTime());
+    } catch (fallbackErr) {
+      console.error('Error in fallback customer visits query:', fallbackErr);
+      return [];
+    }
+  }
+}
+
+
+
 
 
