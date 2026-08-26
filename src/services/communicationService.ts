@@ -52,46 +52,75 @@ function cleanUndefined<T extends Record<string, any>>(obj: T): T {
 }
 
 /**
+ * Helper to extract all possible candidate user IDs (uid, id, loginId, staffId, email).
+ */
+export function getUserCandidateIds(user: { uid?: string; id?: string; loginId?: string; staffId?: string; salesStaffId?: string; deliveryStaffId?: string; email?: string; [key: string]: any }): string[] {
+  if (!user) return [];
+  const raw = [
+    user.uid,
+    user.id,
+    user.loginId,
+    user.staffId,
+    user.salesStaffId,
+    user.deliveryStaffId,
+    user.email
+  ];
+  const valid = raw.filter(item => typeof item === 'string' && item.trim().length > 0).map(item => item!.trim());
+  return Array.from(new Set(valid));
+}
+
+/**
  * Retrieves or creates a 1-on-1 private conversation between Admin and a Staff member.
- * Guarantees no duplicate conversations.
+ * Guarantees no duplicate conversations across UIDs, document IDs, or login IDs.
  */
 export async function getOrCreateCommunicationConversation(
-  adminUser: { uid: string; name?: string; role?: string },
-  staffUser: { uid: string; name?: string; role?: string }
+  adminUser: { uid: string; name?: string; role?: string; [key: string]: any },
+  staffUser: { uid: string; name?: string; role?: string; [key: string]: any }
 ): Promise<CommunicationConversation> {
-  const adminUid = adminUser.uid ? adminUser.uid.trim() : 'admin_hq';
-  const staffUid = staffUser.uid ? staffUser.uid.trim() : '';
+  const adminCandidateIds = getUserCandidateIds(adminUser);
+  if (!adminCandidateIds.includes('admin_hq')) adminCandidateIds.push('admin_hq');
+  if (!adminCandidateIds.includes('admin')) adminCandidateIds.push('admin');
 
-  if (!staffUid) {
-    throw new Error('Staff UID is required to locate or create a conversation.');
+  const staffCandidateIds = getUserCandidateIds(staffUser);
+  const primaryStaffUid = staffCandidateIds[0] || (staffUser.uid ? staffUser.uid.trim() : '');
+
+  if (!primaryStaffUid && staffCandidateIds.length === 0) {
+    throw new Error('Staff UID or identifier is required to locate or create a conversation.');
   }
 
-  // 1. Check if any conversation already exists for this staff member
+  const colRef = collection(db, 'communication_conversations');
+
+  // 1. Check if any conversation already exists for any candidate ID of this staff member
   try {
-    const colRef = collection(db, 'communication_conversations');
-    const q = query(colRef, where('participantIds', 'array-contains', staffUid), limit(10));
+    const q = query(colRef, where('participantIds', 'array-contains-any', staffCandidateIds.slice(0, 10)), limit(10));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const matchingDoc = snap.docs.find(d => {
         const data = d.data() as CommunicationConversation;
-        return data.participantIds.includes(adminUid) || data.participantIds.includes('admin_hq');
+        return data.participantIds.some(id => adminCandidateIds.includes(id));
       }) || snap.docs[0];
 
       const data = matchingDoc.data() as CommunicationConversation;
 
-      // Ensure adminUid is present in participantIds and metadata if needed
-      const needsUpdate = !data.participantIds.includes(adminUid) || !data.participantNames?.[adminUid];
-      if (needsUpdate) {
-        const updatedIds = Array.from(new Set([...data.participantIds, adminUid]));
-        const updatedNames = { ...(data.participantNames || {}), [adminUid]: adminUser.name || 'Admin HQ' };
-        const updatedRoles = { ...(data.participantRoles || {}), [adminUid]: adminUser.role || 'admin' };
+      // Ensure all candidate IDs for both admin and staff are present in participantIds and metadata
+      const allParticipantIds = Array.from(new Set([...(data.participantIds || []), ...adminCandidateIds, ...staffCandidateIds]));
+      
+      const updatedNames = { ...(data.participantNames || {}) };
+      adminCandidateIds.forEach(id => { updatedNames[id] = adminUser.name || 'Admin HQ'; });
+      staffCandidateIds.forEach(id => { updatedNames[id] = staffUser.name || 'Staff Member'; });
 
+      const updatedRoles = { ...(data.participantRoles || {}) };
+      adminCandidateIds.forEach(id => { updatedRoles[id] = adminUser.role || 'admin'; });
+      staffCandidateIds.forEach(id => { updatedRoles[id] = staffUser.role || 'sales'; });
+
+      const needsUpdate = allParticipantIds.length !== (data.participantIds || []).length;
+      if (needsUpdate) {
         await updateDoc(doc(db, 'communication_conversations', matchingDoc.id), {
-          participantIds: updatedIds,
+          participantIds: allParticipantIds,
           participantNames: updatedNames,
           participantRoles: updatedRoles
-        });
-        data.participantIds = updatedIds;
+        }).catch(() => {});
+        data.participantIds = allParticipantIds;
         data.participantNames = updatedNames;
         data.participantRoles = updatedRoles;
       }
@@ -99,38 +128,44 @@ export async function getOrCreateCommunicationConversation(
       return { id: matchingDoc.id, ...data };
     }
   } catch (err) {
-    console.warn('Notice checking existing staff conversation:', err);
+    console.warn('Notice checking existing staff conversation with candidate IDs:', err);
   }
 
   // 2. Deterministic fallback if no conversation document exists yet
-  const conversationId = getDeterministicConversationId(adminUid, staffUid);
+  const primaryAdminUid = adminCandidateIds[0] || 'admin_hq';
+  const conversationId = getDeterministicConversationId(primaryAdminUid, primaryStaffUid);
   const convRef = doc(db, 'communication_conversations', conversationId);
 
   try {
     const snap = await getDoc(convRef);
     if (snap.exists()) {
-      return { id: snap.id, ...(snap.data() as any) } as CommunicationConversation;
+      const data = snap.data() as CommunicationConversation;
+      return { id: snap.id, ...data };
     }
 
     const now = new Date().toISOString();
+    const allParticipantIds = Array.from(new Set([...adminCandidateIds, ...staffCandidateIds]));
+
+    const participantNames: Record<string, string> = {};
+    adminCandidateIds.forEach(id => { participantNames[id] = adminUser.name || 'Admin HQ'; });
+    staffCandidateIds.forEach(id => { participantNames[id] = staffUser.name || 'Staff Member'; });
+
+    const participantRoles: Record<string, string> = {};
+    adminCandidateIds.forEach(id => { participantRoles[id] = adminUser.role || 'admin'; });
+    staffCandidateIds.forEach(id => { participantRoles[id] = staffUser.role || 'sales'; });
+
+    const unreadCounts: Record<string, number> = {};
+    allParticipantIds.forEach(id => { unreadCounts[id] = 0; });
+
     const newConv: CommunicationConversation = {
       id: conversationId,
-      participantIds: Array.from(new Set([adminUid, staffUid])),
-      participantNames: {
-        [adminUid]: adminUser.name || 'Admin HQ',
-        [staffUid]: staffUser.name || 'Staff Member'
-      },
-      participantRoles: {
-        [adminUid]: adminUser.role || 'admin',
-        [staffUid]: staffUser.role || 'sales'
-      },
+      participantIds: allParticipantIds,
+      participantNames,
+      participantRoles,
       lastMessage: 'Conversation opened',
-      lastMessageSenderId: adminUid,
+      lastMessageSenderId: primaryAdminUid,
       lastMessageAt: now,
-      unreadCounts: {
-        [adminUid]: 0,
-        [staffUid]: 0
-      },
+      unreadCounts,
       createdAt: now,
       updatedAt: now
     };
@@ -143,10 +178,10 @@ export async function getOrCreateCommunicationConversation(
       setDoc(doc(db, 'audit_logs', logId), {
         id: logId,
         action: 'COMMUNICATION_CONVERSATION_CREATED',
-        targetUserId: staffUid,
+        targetUserId: primaryStaffUid,
         targetUserName: staffUser.name || 'Staff Member',
         targetRole: staffUser.role || 'staff',
-        performedByUserId: adminUid,
+        performedByUserId: primaryAdminUid,
         performedByUserName: adminUser.name || 'Admin',
         timestamp: now,
         details: `Conversation initialized: ${conversationId}`
@@ -480,14 +515,15 @@ export function subscribeToCommunicationMessages(
 }
 
 /**
- * Subscribes to all conversations relevant to the user.
+ * Subscribes to all conversations relevant to the user (accepts single string or array of candidate user IDs).
  */
 export function subscribeToCommunicationConversations(
-  userId: string,
+  userIds: string | string[],
   role: string,
   callback: (conversations: CommunicationConversation[]) => void
 ): () => void {
-  if (!userId) {
+  const ids = (Array.isArray(userIds) ? userIds : [userIds]).filter(Boolean);
+  if (ids.length === 0) {
     callback([]);
     return () => {};
   }
@@ -496,8 +532,10 @@ export function subscribeToCommunicationConversations(
   let q;
   if (role === 'admin') {
     q = query(colRef, limit(100));
+  } else if (ids.length === 1) {
+    q = query(colRef, where('participantIds', 'array-contains', ids[0]), limit(50));
   } else {
-    q = query(colRef, where('participantIds', 'array-contains', userId), limit(50));
+    q = query(colRef, where('participantIds', 'array-contains-any', ids.slice(0, 10)), limit(50));
   }
 
   return onSnapshot(

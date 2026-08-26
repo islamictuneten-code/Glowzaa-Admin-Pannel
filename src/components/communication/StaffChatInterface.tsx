@@ -27,7 +27,8 @@ import {
   subscribeToCommunicationMessages, 
   subscribeToCommunicationConversations,
   markAllConversationMessagesSeen, 
-  setConversationTypingState 
+  setConversationTypingState,
+  getUserCandidateIds
 } from '../../services/communicationService';
 import { UserAvatar } from '../shared/UserAvatar';
 import { PresenceBadge } from './PresenceBadge';
@@ -86,6 +87,11 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     ];
   }, [currentUser?.role]);
 
+  const userCandidateIds = useMemo(() => {
+    if (!currentUser) return [];
+    return getUserCandidateIds(currentUser);
+  }, [currentUser]);
+
   // Load or create 1-on-1 conversation with Admin, and subscribe to real-time conversation updates
   useEffect(() => {
     if (!currentUser || !currentUserId) return;
@@ -95,16 +101,12 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
       try {
         setLoading(true);
         const conv = await getOrCreateCommunicationConversation(
-          {
+          adminUser || {
             uid: adminUid,
             name: adminName,
             role: 'admin'
           },
-          {
-            uid: currentUserId,
-            name: currentUser.name,
-            role: currentUser.role
-          }
+          currentUser
         );
         if (isMounted) {
           setConversation(conv);
@@ -119,11 +121,12 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     initConv();
 
     // Subscribe to all conversations involving this staff user
-    const unsubConvs = subscribeToCommunicationConversations(currentUserId, currentUser?.role || 'staff', (convs) => {
+    const idsToSubscribe = userCandidateIds.length > 0 ? userCandidateIds : [currentUserId];
+    const unsubConvs = subscribeToCommunicationConversations(idsToSubscribe, currentUser?.role || 'staff', (convs) => {
       if (!isMounted) return;
       if (convs && convs.length > 0) {
-        // Find conversation where currentUserId is participant
-        const myConv = convs.find(c => c.participantIds.includes(currentUserId)) || convs[0];
+        // Find conversation where any candidate ID is a participant
+        const myConv = convs.find(c => c.participantIds.some(id => idsToSubscribe.includes(id))) || convs[0];
         setConversation(myConv);
         setLoading(false);
       }
@@ -133,7 +136,7 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
       isMounted = false;
       unsubConvs();
     };
-  }, [currentUser, adminUid, adminName, currentUserId]);
+  }, [currentUser, adminUser, adminUid, adminName, currentUserId, userCandidateIds]);
 
   // Subscribe to live messages
   useEffect(() => {

@@ -64,7 +64,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
   } = useNotification();
 
   const { currentUser } = useAuth();
-  const { setSelectedOrderId, setIsInvoiceModalOpen, setAdminTab, setSalesTab, setDeliveryTab, role } = useApp();
+  const { orders, setViewingOrder, setAdminTab, setSalesTab, setDeliveryTab, role } = useApp();
 
   const [filterTab, setFilterTab] = useState<'all' | 'unread' | 'urgent' | 'orders'>('all');
   const [showPreferences, setShowPreferences] = useState(false);
@@ -89,14 +89,29 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
     // Route target
     if (notif.actionType === 'order' || notif.relatedId) {
       if (notif.relatedId) {
-        setSelectedOrderId(notif.relatedId);
-        setIsInvoiceModalOpen(true);
+        const targetOrder = orders.find(o => o.id === notif.relatedId || o.orderNumber === notif.relatedId);
+        if (targetOrder) {
+          setViewingOrder(targetOrder);
+          onClose();
+        } else if (role === 'admin') {
+          setAdminTab('orders');
+          onClose();
+        } else if (role === 'sales') {
+          setSalesTab('my_orders');
+          onClose();
+        } else if (role === 'delivery') {
+          setDeliveryTab('assigned_orders');
+          onClose();
+        }
       } else if (role === 'admin') {
         setAdminTab('orders');
+        onClose();
       } else if (role === 'sales') {
         setSalesTab('my_orders');
+        onClose();
       } else if (role === 'delivery') {
         setDeliveryTab('assigned_orders');
+        onClose();
       }
     } else if (notif.actionType === 'delivery') {
       if (role === 'delivery') setDeliveryTab('assigned_orders');

@@ -18,7 +18,7 @@ import { CommunicationNotification } from '../../types';
 
 export const NotificationToast: React.FC = () => {
   const { foregroundToast, dismissToast, markAsRead } = useNotification();
-  const { setSelectedOrderId, setIsInvoiceModalOpen, setAdminTab, setSalesTab, setDeliveryTab, role } = useApp();
+  const { orders, setViewingOrder, setAdminTab, setSalesTab, setDeliveryTab, role } = useApp();
 
   if (!foregroundToast) return null;
 
@@ -28,8 +28,16 @@ export const NotificationToast: React.FC = () => {
     // Route action based on notification actionType or target
     if (foregroundToast.actionType === 'order' || foregroundToast.relatedId) {
       if (foregroundToast.relatedId) {
-        setSelectedOrderId(foregroundToast.relatedId);
-        setIsInvoiceModalOpen(true);
+        const targetOrder = orders.find(o => o.id === foregroundToast.relatedId || o.orderNumber === foregroundToast.relatedId);
+        if (targetOrder) {
+          setViewingOrder(targetOrder);
+        } else if (role === 'admin') {
+          setAdminTab('orders');
+        } else if (role === 'sales') {
+          setSalesTab('my_orders');
+        } else if (role === 'delivery') {
+          setDeliveryTab('assigned_orders');
+        }
       } else if (role === 'admin') {
         setAdminTab('orders');
       } else if (role === 'sales') {

@@ -14,7 +14,8 @@ import { useAuth } from '../../context/AuthContext';
 import { AuthUser, CommunicationConversation, CommunicationDevice } from '../../types';
 import { 
   subscribeToCommunicationConversations, 
-  getOrCreateCommunicationConversation 
+  getOrCreateCommunicationConversation, 
+  getUserCandidateIds 
 } from '../../services/communicationService';
 import { subscribeCommunicationDevices } from '../../services/notificationService';
 import { ConversationList } from './ConversationList';
@@ -58,8 +59,8 @@ export const AdminMessagingCenter: React.FC<AdminMessagingCenterProps> = ({ staf
       return;
     }
 
-    const staffUid = selectedStaff.uid || selectedStaff.id || '';
-    const matching = conversations.find(c => c.participantIds.includes(staffUid));
+    const candidateIds = getUserCandidateIds(selectedStaff);
+    const matching = conversations.find(c => c.participantIds.some(id => candidateIds.includes(id)));
     if (matching) {
       setActiveConversation(matching);
     }
@@ -72,16 +73,12 @@ export const AdminMessagingCenter: React.FC<AdminMessagingCenterProps> = ({ staf
 
     try {
       const conv = await getOrCreateCommunicationConversation(
-        {
+        currentUser || {
           uid: currentUserId,
           name: currentUser?.name || 'Admin HQ',
           role: 'admin'
         },
-        {
-          uid: staff.uid || staff.id || '',
-          name: staff.name,
-          role: staff.role
-        }
+        staff
       );
       setActiveConversation(conv);
     } catch (err) {
