@@ -22,46 +22,6 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 
-interface QuickAccount {
-  id: string;
-  role: 'admin' | 'sales' | 'delivery';
-  label: string;
-  sublabel: string;
-  loginId: string;
-  defaultPass: string;
-  icon: React.ElementType;
-}
-
-const QUICK_ACCOUNTS: QuickAccount[] = [
-  {
-    id: 'admin',
-    role: 'admin',
-    label: 'Admin HQ',
-    sublabel: 'Central Operations',
-    loginId: 'admin@glowzaa.com',
-    defaultPass: '123456',
-    icon: ShieldCheck
-  },
-  {
-    id: 'sales',
-    role: 'sales',
-    label: 'Field Sales',
-    sublabel: 'Orders & Dues',
-    loginId: 'seller01',
-    defaultPass: '123456',
-    icon: TrendingUp
-  },
-  {
-    id: 'delivery',
-    role: 'delivery',
-    label: 'Delivery Fleet',
-    sublabel: 'Dispatch & COD',
-    loginId: 'delivery01',
-    defaultPass: '123456',
-    icon: Truck
-  }
-];
-
 export const LoginPage: React.FC = () => {
   const { login, resetPassword, authError, clearError, isLoading } = useAuth();
 
@@ -72,7 +32,6 @@ export const LoginPage: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [localError, setLocalError] = useState<string | null>(null);
   const [capsLockActive, setCapsLockActive] = useState(false);
-  const [activeQuickRole, setActiveQuickRole] = useState<string | null>(null);
 
   // Forgot password modal state
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -96,15 +55,6 @@ export const LoginPage: React.FC = () => {
     if (e.getModifierState) {
       setCapsLockActive(e.getModifierState('CapsLock'));
     }
-  };
-
-  // Quick fill demo/staff credentials
-  const handleSelectQuickRole = (acc: QuickAccount) => {
-    setEmail(acc.loginId);
-    setPassword(acc.defaultPass);
-    setActiveQuickRole(acc.id);
-    setLocalError(null);
-    clearError();
   };
 
   // Handle Login Submit
@@ -297,42 +247,6 @@ export const LoginPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Quick Role Fill / Demo Selector */}
-              <div className="mb-5 p-3 rounded-2xl bg-slate-50 border border-slate-200/80">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-[#087F7A]" />
-                    Quick Role Sign-In:
-                  </span>
-                  <span className="text-[10px] text-slate-400">1-tap autofill</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1.5">
-                  {QUICK_ACCOUNTS.map((acc) => {
-                    const Icon = acc.icon;
-                    const isSelected = activeQuickRole === acc.id || email === acc.loginId;
-                    return (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => handleSelectQuickRole(acc)}
-                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
-                          isSelected
-                            ? 'bg-[#087F7A] text-white border-[#087F7A] shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/50'
-                        }`}
-                      >
-                        <Icon className={`w-4 h-4 mb-1 ${isSelected ? 'text-white' : 'text-[#087F7A]'}`} />
-                        <span className="text-[11px] font-bold leading-tight truncate w-full">{acc.label}</span>
-                        <span className={`text-[9px] font-mono leading-tight mt-0.5 truncate w-full ${isSelected ? 'text-teal-100' : 'text-slate-400'}`}>
-                          {acc.loginId.includes('@') ? 'admin' : acc.loginId}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Error Alert */}
               {displayError && (
                 <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2.5 animate-in fade-in">
@@ -368,17 +282,13 @@ export const LoginPage: React.FC = () => {
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
-                        setActiveQuickRole(null);
                         if (localError) setLocalError(null);
                       }}
-                      placeholder="seller01, delivery01 or admin@glowzaa.com"
+                      placeholder="Enter username or email"
                       className="w-full pl-10 pr-4 py-2.5 text-sm bg-[#F8FAFB] border border-slate-200 rounded-xl text-[#102A2A] placeholder-slate-400 focus:outline-none focus:bg-white focus:border-[#087F7A] focus:ring-2 focus:ring-[#087F7A]/15 transition-all font-medium"
                       autoComplete="username"
                       autoFocus
                     />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                    <span>Example: <strong className="text-slate-600">seller01</strong>, <strong className="text-slate-600">delivery01</strong></span>
                   </div>
                 </div>
 
