@@ -189,10 +189,10 @@ export async function createStaffAccount(
       return { success: false, error: `The Login ID "${cleanLoginId}" is already in use. Please choose another username.` };
     }
 
-    const authEmail = resolveLoginIdToEmail(cleanLoginId);
+    let authEmail = resolveLoginIdToEmail(cleanLoginId);
 
     // 3. Create Firebase Authentication account in secondary app instance
-    let newUid: string;
+    let newUid: string = '';
     let secondaryApp: any;
     let secondaryAuth: any;
     try {
@@ -208,12 +208,34 @@ export async function createStaffAccount(
         newUid = userCredential.user.uid;
       } catch (authErr: any) {
         if (authErr.code === 'auth/email-already-in-use') {
-          return { success: false, error: `An account for "${cleanLoginId}" already exists in the system.` };
-        }
-        if (authErr.code === 'auth/weak-password') {
+          // If this auth email was already created before (e.g. from previous sessions or before a database wipe),
+          // attempt to sign in with the provided password to re-link and adopt the UID
+          let adopted = false;
+          try {
+            const signInRes = await signInWithEmailAndPassword(secondaryAuth, authEmail, cleanPassword);
+            newUid = signInRes.user.uid;
+            adopted = true;
+          } catch {
+            adopted = false;
+          }
+
+          // If the previous password differs, register a fresh unique auth credential so staff creation is never blocked
+          if (!adopted || !newUid) {
+            const uniqueSuffix = Date.now().toString(36);
+            const freshAuthEmail = `${cleanLoginId}_${uniqueSuffix}@glowzaa.local`;
+            try {
+              const freshCred = await createUserWithEmailAndPassword(secondaryAuth, freshAuthEmail, cleanPassword);
+              newUid = freshCred.user.uid;
+              authEmail = freshAuthEmail;
+            } catch (freshErr: any) {
+              return { success: false, error: freshErr.message || `An account for "${cleanLoginId}" could not be created.` };
+            }
+          }
+        } else if (authErr.code === 'auth/weak-password') {
           return { success: false, error: 'Password is too weak. Please use at least 6 characters.' };
+        } else {
+          return { success: false, error: authErr.message || 'Failed to create authentication account.' };
         }
-        return { success: false, error: authErr.message || 'Failed to create authentication account.' };
       } finally {
         try {
           await secondarySignOut(secondaryAuth);
