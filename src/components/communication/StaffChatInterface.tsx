@@ -25,6 +25,7 @@ import {
   getOrCreateCommunicationConversation, 
   sendCommunicationMessage, 
   subscribeToCommunicationMessages, 
+  subscribeToCommunicationConversations,
   markAllConversationMessagesSeen, 
   setConversationTypingState 
 } from '../../services/communicationService';
@@ -85,9 +86,9 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     ];
   }, [currentUser?.role]);
 
-  // Load or create 1-on-1 conversation with Admin
+  // Load or create 1-on-1 conversation with Admin, and subscribe to real-time conversation updates
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !currentUserId) return;
 
     let isMounted = true;
     const initConv = async () => {
@@ -117,8 +118,20 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
 
     initConv();
 
+    // Subscribe to all conversations involving this staff user
+    const unsubConvs = subscribeToCommunicationConversations(currentUserId, currentUser?.role || 'staff', (convs) => {
+      if (!isMounted) return;
+      if (convs && convs.length > 0) {
+        // Find conversation where currentUserId is participant
+        const myConv = convs.find(c => c.participantIds.includes(currentUserId)) || convs[0];
+        setConversation(myConv);
+        setLoading(false);
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubConvs();
     };
   }, [currentUser, adminUid, adminName, currentUserId]);
 
@@ -163,6 +176,13 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     }, 3000);
   };
 
+  // Target receiver UID (actual admin or fallback)
+  const actualReceiverUid = useMemo(() => {
+    if (!conversation) return adminUid;
+    const otherParticipant = conversation.participantIds.find(id => id !== currentUserId);
+    return otherParticipant || adminUid;
+  }, [conversation, currentUserId, adminUid]);
+
   // Send message
   const handleSendMessage = async (customText?: string) => {
     const textToSend = (customText || inputText).trim();
@@ -181,7 +201,7 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
           role: currentUser.role || 'sales'
         },
         receiver: {
-          uid: adminUid,
+          uid: actualReceiverUid,
           name: adminName,
           role: 'admin'
         },
@@ -213,29 +233,29 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
-  const isAdminTyping = conversation?.typing?.[adminUid]?.isTyping;
+  const isAdminTyping = conversation?.typing?.[actualReceiverUid]?.isTyping;
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[calc(100vh-140px)] min-h-[500px] max-w-5xl mx-auto text-left">
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[calc(100dvh-130px)] sm:h-[calc(100vh-140px)] min-h-[380px] max-w-5xl mx-auto text-left mb-16 sm:mb-0">
       
-      {/* Top Header */}
-      <div className="p-4 bg-gradient-to-r from-teal-950 via-[#087F7A] to-teal-900 text-white flex items-center justify-between gap-3 shadow-md shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 flex items-center justify-center text-white shadow-2xs">
-            <ShieldCheck className="w-5 h-5 text-emerald-300" />
+      {/* Top Header - Auto Responsive for Mobile */}
+      <div className="p-3 sm:p-4 bg-gradient-to-r from-teal-950 via-[#087F7A] to-teal-900 text-white flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 shadow-md shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 flex items-center justify-center text-white shrink-0 shadow-2xs">
+            <ShieldCheck className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-emerald-300" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-extrabold text-base sm:text-lg tracking-tight">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <h2 className="font-extrabold text-sm sm:text-base tracking-tight truncate">
                 HQ Administration
               </h2>
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 uppercase tracking-wide">
+              <span className="text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 uppercase tracking-wide shrink-0">
                 Official Support
               </span>
             </div>
-            <p className="text-xs text-teal-100/80 mt-0.5 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Glowzaa B2B Central Ops • Real-time Active</span>
+            <p className="text-[11px] sm:text-xs text-teal-100/80 mt-0.5 flex items-center gap-1.5 truncate">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="truncate">Glowzaa B2B Central Ops • Real-time Active</span>
             </p>
           </div>
         </div>
@@ -243,14 +263,15 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
         {/* Action Button */}
         <button
           onClick={() => setShowTemplates(!showTemplates)}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+          className={`px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
             showTemplates
               ? 'bg-white text-[#087F7A] shadow-xs'
               : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Quick Responses</span>
+          <Sparkles className="w-3.5 h-3.5 text-amber-300 sm:text-white" />
+          <span className="hidden xs:inline sm:inline">Quick Responses</span>
+          <span className="inline xs:hidden sm:hidden">Templates</span>
         </button>
       </div>
 

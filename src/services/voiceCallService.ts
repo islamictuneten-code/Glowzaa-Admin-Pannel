@@ -62,13 +62,24 @@ export class VoiceCallManager {
    */
   public async requestMicrophonePermission(): Promise<MediaStream> {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone API is not supported in this environment or context.');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       this.localStream = stream;
       if (this.onLocalStream) this.onLocalStream(stream);
       return stream;
-    } catch (err) {
-      console.error('Microphone permission denied or unavailable', err);
-      throw new Error('Microphone access is blocked. Please allow microphone permission in your browser/device settings and try again.');
+    } catch (err: any) {
+      console.warn('Microphone permission denied or unavailable:', err);
+      const errName = err?.name || '';
+      const errMsg = err?.message || '';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError' || errMsg.includes('Permission denied')) {
+        throw new Error('Microphone permission was denied. Please allow microphone access in your browser site settings or address bar icon and try again.');
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        throw new Error('No microphone hardware was detected on your device.');
+      } else {
+        throw new Error('Microphone is unavailable. Please check your browser microphone permissions.');
+      }
     }
   }
 

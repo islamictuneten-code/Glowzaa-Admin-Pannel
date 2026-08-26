@@ -63,11 +63,7 @@ export const ActiveVoiceCall: React.FC<ActiveVoiceCallProps> = ({ call, currentU
           }
         }
       } catch (err: any) {
-        setError(err.message || 'Failed to connect');
-        setTimeout(() => {
-          voiceCallManager.cleanupCall();
-          onClose();
-        }, 3000);
+        setError(err.message || 'Failed to connect microphone or call.');
       }
     };
     
@@ -145,11 +141,23 @@ export const ActiveVoiceCall: React.FC<ActiveVoiceCallProps> = ({ call, currentU
           
           <h2 className="text-2xl font-bold text-white mb-1">{otherPartyName}</h2>
           <p className="text-emerald-300 font-medium tracking-wide text-sm uppercase mb-6">{otherPartyRole}</p>
-          
-          <div className="flex items-center space-x-2 bg-black/20 rounded-full px-4 py-2">
-            <span className={`w-2 h-2 rounded-full ${getConnectionColor()} ${connectionState === 'reconnecting' ? 'animate-pulse' : ''}`} />
-            <span className="text-white/90 text-lg font-mono tracking-wider">{getStatusDisplay()}</span>
-          </div>
+
+          {error ? (
+            <div className="bg-red-500/20 border border-red-500/50 rounded-2xl p-4 text-left max-w-xs mb-4 animate-in fade-in duration-200">
+              <div className="flex items-start space-x-3">
+                <AlertCircle className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-red-200 mb-1">Microphone Access Issue</h4>
+                  <p className="text-xs text-red-100/90 leading-relaxed">{error}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 bg-black/20 rounded-full px-4 py-2">
+              <span className={`w-2 h-2 rounded-full ${getConnectionColor()} ${connectionState === 'reconnecting' ? 'animate-pulse' : ''}`} />
+              <span className="text-white/90 text-lg font-mono tracking-wider">{getStatusDisplay()}</span>
+            </div>
+          )}
         </div>
 
         {/* Controls */}

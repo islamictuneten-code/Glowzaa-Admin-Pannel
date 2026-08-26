@@ -59,7 +59,51 @@ export async function getOrCreateCommunicationConversation(
   adminUser: { uid: string; name?: string; role?: string },
   staffUser: { uid: string; name?: string; role?: string }
 ): Promise<CommunicationConversation> {
-  const conversationId = getDeterministicConversationId(adminUser.uid, staffUser.uid);
+  const adminUid = adminUser.uid ? adminUser.uid.trim() : 'admin_hq';
+  const staffUid = staffUser.uid ? staffUser.uid.trim() : '';
+
+  if (!staffUid) {
+    throw new Error('Staff UID is required to locate or create a conversation.');
+  }
+
+  // 1. Check if any conversation already exists for this staff member
+  try {
+    const colRef = collection(db, 'communication_conversations');
+    const q = query(colRef, where('participantIds', 'array-contains', staffUid), limit(10));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const matchingDoc = snap.docs.find(d => {
+        const data = d.data() as CommunicationConversation;
+        return data.participantIds.includes(adminUid) || data.participantIds.includes('admin_hq');
+      }) || snap.docs[0];
+
+      const data = matchingDoc.data() as CommunicationConversation;
+
+      // Ensure adminUid is present in participantIds and metadata if needed
+      const needsUpdate = !data.participantIds.includes(adminUid) || !data.participantNames?.[adminUid];
+      if (needsUpdate) {
+        const updatedIds = Array.from(new Set([...data.participantIds, adminUid]));
+        const updatedNames = { ...(data.participantNames || {}), [adminUid]: adminUser.name || 'Admin HQ' };
+        const updatedRoles = { ...(data.participantRoles || {}), [adminUid]: adminUser.role || 'admin' };
+
+        await updateDoc(doc(db, 'communication_conversations', matchingDoc.id), {
+          participantIds: updatedIds,
+          participantNames: updatedNames,
+          participantRoles: updatedRoles
+        });
+        data.participantIds = updatedIds;
+        data.participantNames = updatedNames;
+        data.participantRoles = updatedRoles;
+      }
+
+      return { id: matchingDoc.id, ...data };
+    }
+  } catch (err) {
+    console.warn('Notice checking existing staff conversation:', err);
+  }
+
+  // 2. Deterministic fallback if no conversation document exists yet
+  const conversationId = getDeterministicConversationId(adminUid, staffUid);
   const convRef = doc(db, 'communication_conversations', conversationId);
 
   try {
@@ -71,21 +115,21 @@ export async function getOrCreateCommunicationConversation(
     const now = new Date().toISOString();
     const newConv: CommunicationConversation = {
       id: conversationId,
-      participantIds: [adminUser.uid, staffUser.uid],
+      participantIds: Array.from(new Set([adminUid, staffUid])),
       participantNames: {
-        [adminUser.uid]: adminUser.name || 'Admin HQ',
-        [staffUser.uid]: staffUser.name || 'Staff Member'
+        [adminUid]: adminUser.name || 'Admin HQ',
+        [staffUid]: staffUser.name || 'Staff Member'
       },
       participantRoles: {
-        [adminUser.uid]: adminUser.role || 'admin',
-        [staffUser.uid]: staffUser.role || 'sales'
+        [adminUid]: adminUser.role || 'admin',
+        [staffUid]: staffUser.role || 'sales'
       },
       lastMessage: 'Conversation opened',
-      lastMessageSenderId: adminUser.uid,
+      lastMessageSenderId: adminUid,
       lastMessageAt: now,
       unreadCounts: {
-        [adminUser.uid]: 0,
-        [staffUser.uid]: 0
+        [adminUid]: 0,
+        [staffUid]: 0
       },
       createdAt: now,
       updatedAt: now
@@ -99,10 +143,10 @@ export async function getOrCreateCommunicationConversation(
       setDoc(doc(db, 'audit_logs', logId), {
         id: logId,
         action: 'COMMUNICATION_CONVERSATION_CREATED',
-        targetUserId: staffUser.uid,
+        targetUserId: staffUid,
         targetUserName: staffUser.name || 'Staff Member',
         targetRole: staffUser.role || 'staff',
-        performedByUserId: adminUser.uid,
+        performedByUserId: adminUid,
         performedByUserName: adminUser.name || 'Admin',
         timestamp: now,
         details: `Conversation initialized: ${conversationId}`

@@ -34,12 +34,24 @@ export class GroupVoiceCallManager {
 
   public async requestMicrophonePermission(): Promise<MediaStream> {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone API is not supported in this environment or context.');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       this.localStream = stream;
       if (this.onLocalStream) this.onLocalStream(stream);
       return stream;
-    } catch (err) {
-      throw new Error('Microphone access is blocked or unavailable.');
+    } catch (err: any) {
+      console.warn('Group call microphone permission error:', err);
+      const errName = err?.name || '';
+      const errMsg = err?.message || '';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError' || errMsg.includes('Permission denied')) {
+        throw new Error('Microphone permission was denied. Please allow microphone access in your browser settings.');
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        throw new Error('No microphone hardware detected.');
+      } else {
+        throw new Error('Microphone is unavailable.');
+      }
     }
   }
 
