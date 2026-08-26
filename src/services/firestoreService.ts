@@ -4917,6 +4917,14 @@ export async function wipeAllApplicationDataInFirestore(currentUser: AuthUser): 
       'cash_handovers',
       'expenses',
       'audit_logs',
+      'staffSalaryProfiles',
+      'monthlyPayrolls',
+      'salaryPayments',
+      'staffLoans',
+      'payrollAdjustments',
+      'field_duty_sessions',
+      'field_location_pings',
+      'customer_visits',
       'users'
     ];
 
