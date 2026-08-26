@@ -4925,6 +4925,7 @@ export async function wipeAllApplicationDataInFirestore(currentUser: AuthUser): 
       'field_duty_sessions',
       'field_location_pings',
       'customer_visits',
+      'staff_notifications',
       'users'
     ];
 

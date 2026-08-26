@@ -2076,6 +2076,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCollections([]);
       setSalesStaff([]);
       setDeliveryStaff([]);
+      setProducts([]);
+      setCategoryDocs([]);
+      setInventoryTransactions([]);
+      setCustomers([]);
+      setOrders([]);
+      setPayments([]);
+      setCustomerLedger([]);
+      setDeliveryHistory([]);
+      setCashHandovers([]);
+      setExpenses([]);
     }
     return res;
   };
