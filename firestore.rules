@@ -35,9 +35,9 @@ service cloud.firestore {
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'delivery');
     }
 
-    // Users Collection rules: All authenticated staff can read staff list; Admin can create/update/delete any user; Root admin can self-provision; Non-admins can self-register ONLY with non-privileged roles and CANNOT inject privileged RBAC fields or edit roles/permissions.
+    // Users Collection rules: Allow public read so staff can resolve loginId/phone to authEmail prior to sign-in; Admin can create/update/delete any user; Root admin can self-provision; Non-admins can self-register ONLY with non-privileged roles and CANNOT inject privileged RBAC fields or edit roles/permissions.
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAdmin() || (
         isOwner(userId) && 
         request.auth.token.email in ['admin@glowzaa.com', 'rakibseohub@gmail.com']

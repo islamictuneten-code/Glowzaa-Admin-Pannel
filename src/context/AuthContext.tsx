@@ -6,7 +6,6 @@ import {
   createUserWithEmailAndPassword, 
   signOut as firebaseSignOut, 
   sendPasswordResetEmail,
-  signInAnonymously,
   User as FirebaseUser,
   setPersistence,
   browserLocalPersistence,
@@ -435,16 +434,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let authEmail = cleanInput.toLowerCase();
 
     try {
-      // 1. Resolve Login ID to Authentication Email
+      // 1. Resolve Login ID or Phone number to actual Authentication Email from Firestore
       if (!cleanInput.includes('@')) {
         try {
-          const q = query(collection(db, 'users'), where('loginId', '==', cleanInput.toLowerCase()));
-          const querySnap = await getDocs(q);
+          const qLogin = query(collection(db, 'users'), where('loginId', '==', cleanInput.toLowerCase()));
+          const querySnap = await getDocs(qLogin);
           if (!querySnap.empty) {
             const foundData = querySnap.docs[0].data();
             authEmail = foundData.email || resolveLoginIdToEmail(cleanInput);
           } else {
-            authEmail = resolveLoginIdToEmail(cleanInput);
+            // Also check by phone number
+            const qPhone = query(collection(db, 'users'), where('phone', '==', cleanInput));
+            const phoneSnap = await getDocs(qPhone);
+            if (!phoneSnap.empty) {
+              const foundData = phoneSnap.docs[0].data();
+              authEmail = foundData.email || resolveLoginIdToEmail(cleanInput);
+            } else {
+              authEmail = resolveLoginIdToEmail(cleanInput);
+            }
           }
         } catch {
           authEmail = resolveLoginIdToEmail(cleanInput);
@@ -459,25 +466,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Auth persistence fallback:', persistErr);
       }
 
-      let user: any = null;
+      let user: FirebaseUser | null = null;
 
-      // Try standard sign in first
+      // Try signing in with resolved email
       try {
         const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
         user = userCredential.user;
       } catch (signInErr: any) {
-        // If sign in fails, try creating auth user or fallback to anonymous auth for seamless access
-        if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential' || signInErr.code === 'auth/wrong-password') {
+        // If initial email failed and differed from standard resolveLoginIdToEmail, try standard resolveLoginIdToEmail
+        const fallbackEmail = resolveLoginIdToEmail(cleanInput);
+        if (authEmail !== fallbackEmail) {
           try {
-            const cred = await createUserWithEmailAndPassword(auth, authEmail, password);
-            user = cred.user;
-          } catch (createErr: any) {
-            const anonCred = await signInAnonymously(auth);
-            user = anonCred.user;
+            const retryCred = await signInWithEmailAndPassword(auth, fallbackEmail, password);
+            user = retryCred.user;
+          } catch {
+            // Re-throw original or translated error
           }
-        } else {
-          const anonCred = await signInAnonymously(auth);
-          user = anonCred.user;
+        }
+
+        if (!user) {
+          let readableError = 'Invalid Login ID or Password. Please check your credentials. (ভুল লগইন আইডি বা পাসওয়ার্ড)';
+          if (signInErr.code === 'auth/user-not-found') {
+            readableError = `No account found for "${cleanInput}". Please contact HQ Admin. (এই আইডিতে কোনো অ্যাকাউন্ট নেই)`;
+          } else if (signInErr.code === 'auth/wrong-password' || signInErr.code === 'auth/invalid-credential') {
+            readableError = 'Incorrect password or login ID. Please try again. (ভুল পাসওয়ার্ড বা লগইন আইডি)';
+          } else if (signInErr.code === 'auth/too-many-requests') {
+            readableError = 'Access temporarily blocked due to multiple failed attempts. Please wait a few moments. (অতিরিক্ত চেষ্টার কারণে সাময়িক স্থগিত)';
+          } else if (signInErr.code === 'auth/user-disabled') {
+            readableError = 'This staff account has been disabled by HQ Administrator. (অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে)';
+          }
+          setIsLoading(false);
+          setAuthError(readableError);
+          return { success: false, error: readableError };
         }
       }
 
