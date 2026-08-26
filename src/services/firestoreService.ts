@@ -6031,7 +6031,22 @@ export async function getCustomerVisitsForDateRange(
   }
 }
 
-
-
-
+// ============================================================================
+// STEP 15 - PHASE 2: PRIVATE REAL-TIME TEXT MESSAGING EXPORTS
+// ============================================================================
+export {
+  getDeterministicConversationId,
+  getOrCreateCommunicationConversation,
+  sendCommunicationMessage,
+  getCommunicationConversation,
+  getUserCommunicationConversations,
+  markCommunicationMessageDelivered,
+  markCommunicationMessageSeen,
+  markAllConversationMessagesSeen,
+  getCommunicationMessages,
+  subscribeToCommunicationMessages,
+  subscribeToCommunicationConversations,
+  setConversationTypingState,
+  getUnreadCommunicationMessageCount
+} from './communicationService';
 

@@ -301,7 +301,53 @@ service cloud.firestore {
     // FIREBASE PUSH NOTIFICATION & STAFF COMMUNICATION SYSTEM (STEP 15)
     // ========================================================================
 
-    // Staff Push Tokens: Admin can read all tokens; Staff can read, register, and update their own device tokens; Admin full control
+    // Communication Devices: Admin can read all; Users can read, create, and update their own device records
+    match /communication_devices/{deviceId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && (isAdmin() || request.resource.data.userId == request.auth.uid);
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          resource.data.userId == request.auth.uid && 
+          request.resource.data.userId == resource.data.userId
+        )
+      );
+      allow delete: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
+    }
+
+    // Communication Notifications: Read for recipients, sender, or broadcast; Admin full access; Recipient can update read status
+    match /communication_notifications/{notificationId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.recipientUserId == request.auth.uid || 
+        resource.data.recipientUserId == 'all' || 
+        resource.data.recipientRole == 'all' || 
+        resource.data.recipientRole == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role ||
+        resource.data.recipientUserId == ('role:' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role) ||
+        resource.data.senderUserId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        request.resource.data.senderUserId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          (
+            resource.data.recipientUserId == request.auth.uid || 
+            resource.data.recipientUserId == 'all' || 
+            resource.data.recipientRole == 'all' || 
+            resource.data.recipientRole == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role ||
+            resource.data.recipientUserId == ('role:' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)
+          ) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'senderUserId', 'senderName', 'senderRole', 'recipientUserId', 'recipientRole',
+            'title', 'body', 'type', 'priority', 'actionType', 'createdAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Staff Push Tokens: Legacy compatibility
     match /staff_push_tokens/{tokenId} {
       allow read: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated() && (isAdmin() || request.resource.data.userId == request.auth.uid);
@@ -314,7 +360,7 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
     }
 
-    // Staff Notifications: All authenticated staff can read notifications targeted to them or broadcast to 'all'; Admin full read/write; Staff can mark notifications as read
+    // Staff Notifications: Legacy compatibility
     match /staff_notifications/{notificationId} {
       allow read: if isAuthenticated() && (
         isAdmin() || 
@@ -340,6 +386,145 @@ service cloud.firestore {
           ])
         )
       );
+      allow delete: if isAdmin();
+    }
+
+    // ========================================================================
+    // STEP 15 - PHASE 2: PRIVATE REAL-TIME TEXT MESSAGING SYSTEM RULES
+    // ========================================================================
+
+    // Private Conversations: Admin can access all; Staff can only access conversations they participate in
+    match /communication_conversations/{conversationId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        (resource.data.participantIds != null && request.auth.uid in resource.data.participantIds)
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        (request.resource.data.participantIds != null && request.auth.uid in request.resource.data.participantIds)
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (resource.data.participantIds != null && request.auth.uid in resource.data.participantIds)
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Private Messages: Sender or Receiver participant isolation; Staff cannot spoof senderId; Staff cannot delete
+    match /communication_messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        request.resource.data.senderId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          (resource.data.receiverId == request.auth.uid || resource.data.senderId == request.auth.uid) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'conversationId', 'senderId', 'senderRole', 'receiverId', 'sentAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ========================================================================
+    // STEP 15 - PHASE 3: PREMIUM REAL-TIME VOICE CALLING SYSTEM RULES
+    // ========================================================================
+    
+    match /communication_calls/{callId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.callerId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+      
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        request.resource.data.callerId == request.auth.uid
+      );
+      
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          (resource.data.callerId == request.auth.uid || resource.data.receiverId == request.auth.uid) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'callerId', 'receiverId', 'createdAt'
+          ])
+        )
+      );
+      
+      allow delete: if isAdmin();
+      
+      match /signals/{signalId} {
+        allow read: if isAuthenticated() && (
+          isAdmin() || 
+          get(/databases/$(database)/documents/communication_calls/$(callId)).data.callerId == request.auth.uid ||
+          get(/databases/$(database)/documents/communication_calls/$(callId)).data.receiverId == request.auth.uid
+        );
+        
+        allow create: if isAuthenticated() && (
+          isAdmin() || (
+            request.resource.data.senderId == request.auth.uid && (
+              get(/databases/$(database)/documents/communication_calls/$(callId)).data.callerId == request.auth.uid ||
+              get(/databases/$(database)/documents/communication_calls/$(callId)).data.receiverId == request.auth.uid
+            )
+          )
+        );
+        
+        allow update: if false; // Signals should be immutable once created
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ========================================================================
+    // STEP 15 - PHASE 4: ADVANCED VOICE CALL & GROUP COMMUNICATION RULES
+    // ========================================================================
+    
+    match /communication_group_calls/{callId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        request.auth.uid in resource.data.participantIds
+      );
+      
+      allow create: if isAuthenticated() && isAdmin();
+      
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        // Participants can only update their own status within the participants map
+        (request.auth.uid in resource.data.participantIds)
+      );
+      
+      allow delete: if isAdmin();
+      
+      match /signals/{signalId} {
+        allow read: if isAuthenticated() && (
+          isAdmin() || 
+          request.auth.uid in get(/databases/$(database)/documents/communication_group_calls/$(callId)).data.participantIds
+        );
+        allow create: if isAuthenticated() && (
+          isAdmin() || 
+          (request.resource.data.senderId == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/communication_group_calls/$(callId)).data.participantIds)
+        );
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+    }
+    
+    match /communication_announcements/{announcementId} {
+      allow read: if isAuthenticated(); // All authenticated users can read announcements (filters applied in UI/queries)
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    match /communication_call_queue/{queueId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.callerId == request.auth.uid || resource.data.targetId == request.auth.uid);
+      allow create: if isAuthenticated() && (isAdmin() || request.resource.data.callerId == request.auth.uid);
+      allow update: if isAuthenticated() && (isAdmin() || resource.data.callerId == request.auth.uid || resource.data.targetId == request.auth.uid);
       allow delete: if isAdmin();
     }
 

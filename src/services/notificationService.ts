@@ -21,10 +21,18 @@ import {
   StaffPushToken, 
   AuthUser, 
   NotificationType, 
-  NotificationPriority 
+  NotificationPriority,
+  CommunicationDevice,
+  CommunicationNotification,
+  CommunicationNotificationType,
+  CommunicationActionType,
+  DevicePermissionStatus,
+  NotificationPreferences
 } from '../types';
 
+// ============================================================================
 // Web Audio API Chime Synthesizer & Mobile Sound Engine Unlock
+// ============================================================================
 let globalAudioContext: AudioContext | null = null;
 
 export const getSharedAudioContext = (): AudioContext | null => {
@@ -56,19 +64,19 @@ export const unlockAudioEngine = async () => {
   }
 };
 
-// Global auto-unlock listeners on mobile user interaction
+// Global auto-unlock listeners on first user interaction
 if (typeof window !== 'undefined') {
   const handleAutoUnlock = () => {
     unlockAudioEngine();
   };
-  window.addEventListener('pointerdown', handleAutoUnlock, { passive: true });
-  window.addEventListener('touchstart', handleAutoUnlock, { passive: true });
-  window.addEventListener('click', handleAutoUnlock, { passive: true });
-  window.addEventListener('keydown', handleAutoUnlock, { passive: true });
+  window.addEventListener('pointerdown', handleAutoUnlock, { passive: true, once: true });
+  window.addEventListener('touchstart', handleAutoUnlock, { passive: true, once: true });
+  window.addEventListener('click', handleAutoUnlock, { passive: true, once: true });
+  window.addEventListener('keydown', handleAutoUnlock, { passive: true, once: true });
 }
 
 // Multi-tone chime synthesizer for audible notification alerts on Android & Desktop
-export const playNotificationSound = (priority: NotificationPriority = 'normal') => {
+export const playNotificationSound = (priority: 'normal' | 'important' | 'urgent' = 'normal') => {
   try {
     const ctx = getSharedAudioContext();
     if (!ctx) return;
@@ -81,16 +89,16 @@ export const playNotificationSound = (priority: NotificationPriority = 'normal')
     const gainNode = ctx.createGain();
     gainNode.connect(ctx.destination);
 
-    // Physical vibration feedback on mobile devices
+    // Hardware vibration feedback on mobile devices
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
-        navigator.vibrate(priority === 'urgent' ? [400, 150, 400, 150, 400] : [250, 100, 250]);
+        navigator.vibrate(priority === 'urgent' ? [400, 150, 400, 150, 400] : priority === 'important' ? [250, 100, 250] : [150]);
       } catch {}
     }
 
     if (priority === 'urgent') {
-      // 🚨 High Alert Dual-Tone Loud Ring (A5 880Hz -> D6 1174Hz -> E6 1318Hz)
-      gainNode.gain.setValueAtTime(0.7, now);
+      // High Alert Dual-Tone Loud Ring (A5 880Hz -> D6 1174Hz -> E6 1318Hz)
+      gainNode.gain.setValueAtTime(0.75, now);
 
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
@@ -104,7 +112,7 @@ export const playNotificationSound = (priority: NotificationPriority = 'normal')
       osc2.frequency.setValueAtTime(1318.5, now + 0.18);
       osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.35);
 
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
 
       osc1.connect(gainNode);
       osc2.connect(gainNode);
@@ -112,22 +120,22 @@ export const playNotificationSound = (priority: NotificationPriority = 'normal')
       osc1.start(now);
       osc1.stop(now + 0.17);
       osc2.start(now + 0.18);
-      osc2.stop(now + 0.48);
+      osc2.stop(now + 0.52);
     } else if (priority === 'important') {
-      // 🔔 Important Chime (659Hz -> 880Hz)
-      gainNode.gain.setValueAtTime(0.6, now);
+      // Important Chime (659Hz -> 880Hz)
+      gainNode.gain.setValueAtTime(0.65, now);
       const osc = ctx.createOscillator();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(659.25, now);
       osc.frequency.setValueAtTime(880, now + 0.12);
 
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
 
       osc.connect(gainNode);
       osc.start(now);
-      osc.stop(now + 0.38);
+      osc.stop(now + 0.4);
     } else {
-      // 🎵 Standard Notice Chime (523Hz -> 659Hz)
+      // Standard Notice Chime (523Hz -> 659Hz)
       gainNode.gain.setValueAtTime(0.5, now);
       const osc = ctx.createOscillator();
       osc.type = 'sine';
@@ -145,20 +153,93 @@ export const playNotificationSound = (priority: NotificationPriority = 'normal')
   }
 };
 
-// Android Mobile & Desktop System Push Banner Handler
+// ============================================================================
+// Client Device & Platform Detection
+// ============================================================================
+export const getPersistentDeviceId = (): string => {
+  if (typeof window === 'undefined') return 'device_server_fallback';
+  const STORAGE_KEY = 'glowzaa_device_uuid';
+  let deviceId = localStorage.getItem(STORAGE_KEY);
+  if (!deviceId) {
+    deviceId = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    try {
+      localStorage.setItem(STORAGE_KEY, deviceId);
+    } catch {}
+  }
+  return deviceId;
+};
+
+export const detectClientDeviceInfo = (): {
+  platform: 'Android' | 'Windows' | 'macOS' | 'iOS' | 'Linux' | 'Unknown';
+  browser: string;
+  deviceLabel: string;
+  isMobile: boolean;
+} => {
+  if (typeof window === 'undefined') {
+    return { platform: 'Unknown', browser: 'Unknown', deviceLabel: 'Generic Client', isMobile: false };
+  }
+
+  const ua = navigator.userAgent || '';
+  let platform: 'Android' | 'Windows' | 'macOS' | 'iOS' | 'Linux' | 'Unknown' = 'Unknown';
+  let isMobile = false;
+
+  if (/android/i.test(ua)) {
+    platform = 'Android';
+    isMobile = true;
+  } else if (/iphone|ipad|ipod/i.test(ua)) {
+    platform = 'iOS';
+    isMobile = true;
+  } else if (/windows/i.test(ua)) {
+    platform = 'Windows';
+  } else if (/macintosh|mac os x/i.test(ua)) {
+    platform = 'macOS';
+  } else if (/linux/i.test(ua)) {
+    platform = 'Linux';
+  }
+
+  let browser = 'Chrome';
+  if (/edg/i.test(ua)) browser = 'Edge';
+  else if (/samsung/i.test(ua)) browser = 'Samsung Internet';
+  else if (/firefox/i.test(ua)) browser = 'Firefox';
+  else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = 'Safari';
+  else if (/opera|opr/i.test(ua)) browser = 'Opera';
+
+  // Build human friendly device label
+  let deviceLabel = `${platform} • ${browser}`;
+  if (platform === 'Android') {
+    const match = ua.match(/;\s*([^;]+)\s+Build/);
+    if (match && match[1]) {
+      deviceLabel = `${match[1].trim()} • Android / ${browser}`;
+    } else {
+      deviceLabel = `Android Mobile • ${browser}`;
+    }
+  } else if (platform === 'iOS') {
+    deviceLabel = `Apple Device • iOS / ${browser}`;
+  } else if (platform === 'macOS') {
+    deviceLabel = `Mac Workstation • ${browser}`;
+  } else if (platform === 'Windows') {
+    deviceLabel = `Windows PC • ${browser}`;
+  }
+
+  return { platform, browser, deviceLabel, isMobile };
+};
+
+// ============================================================================
+// Android Mobile & Desktop System Push Banner Display
+// ============================================================================
 export const displaySystemNotification = async (
   title: string,
   options: {
     body: string;
     icon?: string;
     tag?: string;
-    priority?: NotificationPriority;
+    priority?: 'normal' | 'important' | 'urgent';
     actionUrl?: string;
   }
 ) => {
   if (typeof window === 'undefined') return;
 
-  // 1. Play audio chime alert & trigger hardware vibration
+  // 1. Trigger audio chime alert & physical vibration
   playNotificationSound(options.priority || 'normal');
 
   // 2. Check notification permission
@@ -198,87 +279,112 @@ export const displaySystemNotification = async (
       }
     }
   } catch (swErr) {
-    console.warn('SW showNotification fallback error:', swErr);
+    console.warn('SW showNotification notice:', swErr);
   }
 
   // Desktop / Safari direct constructor fallback
   try {
     new Notification(title, notifOptions);
   } catch (err) {
-    console.warn('Direct Notification constructor error:', err);
+    console.warn('Direct Notification constructor notice:', err);
   }
 };
 
-// Device Detector Helper
-export const detectDeviceClientInfo = (): { deviceType: 'android' | 'desktop' | 'mobile_browser' | 'unknown'; browser: string; userAgent: string } => {
-  if (typeof window === 'undefined') {
-    return { deviceType: 'unknown', browser: 'Unknown', userAgent: '' };
-  }
-  const ua = navigator.userAgent || '';
-  const isAndroid = /android/i.test(ua);
-  const isMobile = /mobile|iphone|ipad|android/i.test(ua);
-  
-  let browser = 'Chrome';
-  if (/edg/i.test(ua)) browser = 'Edge';
-  else if (/firefox/i.test(ua)) browser = 'Firefox';
-  else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = 'Safari';
-  else if (/samsung/i.test(ua)) browser = 'Samsung Internet';
+// ============================================================================
+// STEP 15: Device Registration & FCM Token in `communication_devices`
+// ============================================================================
 
-  let deviceType: 'android' | 'desktop' | 'mobile_browser' | 'unknown' = 'desktop';
-  if (isAndroid) deviceType = 'android';
-  else if (isMobile) deviceType = 'mobile_browser';
-
-  return { deviceType, browser, userAgent: ua };
-};
-
-// 1. Register or Update Staff FCM Push Token in Firestore (/staff_push_tokens)
-export const registerPushTokenInFirestore = async (
+export const registerCommunicationDevice = async (
   user: AuthUser,
-  tokenString: string
-): Promise<{ success: boolean; tokenId?: string; error?: string }> => {
-  if (!user || !user.uid || !tokenString) {
-    return { success: false, error: 'User UID and token string required.' };
+  fcmTokenString: string,
+  permissionStatus: DevicePermissionStatus = 'granted'
+): Promise<{ success: boolean; deviceId?: string; error?: string }> => {
+  if (!user || !user.uid) {
+    return { success: false, error: 'Authenticated user profile is required.' };
   }
 
   try {
-    const { deviceType, browser, userAgent } = detectDeviceClientInfo();
-    // Unique token ID based on sanitized token snippet or user+device
-    const tokenId = `token_${user.uid}_${tokenString.substring(0, 12).replace(/[^a-zA-Z0-9]/g, '')}`;
-    const tokenDocRef = doc(db, 'staff_push_tokens', tokenId);
+    const rawDeviceId = getPersistentDeviceId();
+    const cleanDeviceId = `dev_${user.uid}_${rawDeviceId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const { platform, browser, deviceLabel } = detectClientDeviceInfo();
     const nowIso = new Date().toISOString();
 
-    const tokenData: StaffPushToken = {
-      id: tokenId,
-      tokenId: tokenId,
+    const deviceDocRef = doc(db, 'communication_devices', cleanDeviceId);
+
+    const deviceData: CommunicationDevice = {
+      id: cleanDeviceId,
       userId: user.uid,
-      userLoginId: user.loginId || user.email?.split('@')[0],
-      userName: user.name,
       role: user.role,
-      token: tokenString,
-      deviceType: deviceType,
+      userName: user.name || 'Glowzaa Staff',
+      platform: platform,
       browser: browser,
-      userAgent: userAgent,
-      createdAt: nowIso,
-      updatedAt: nowIso,
+      deviceLabel: deviceLabel,
+      fcmToken: fcmTokenString || `pwa_token_${user.uid}_${Date.now()}`,
+      permissionStatus: permissionStatus,
+      isActive: true,
       lastSeenAt: nowIso,
-      isActive: true
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
 
-    await setDoc(tokenDocRef, {
-      ...tokenData,
+    await setDoc(deviceDocRef, {
+      ...deviceData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastSeenAt: serverTimestamp()
     }, { merge: true });
 
-    return { success: true, tokenId };
+    // Legacy sync to staff_push_tokens for backward compatibility
+    try {
+      const legacyTokenId = `token_${user.uid}_${(fcmTokenString || cleanDeviceId).substring(0, 12).replace(/[^a-zA-Z0-9]/g, '')}`;
+      const legacyDocRef = doc(db, 'staff_push_tokens', legacyTokenId);
+      await setDoc(legacyDocRef, {
+        id: legacyTokenId,
+        tokenId: legacyTokenId,
+        userId: user.uid,
+        userName: user.name,
+        role: user.role,
+        token: fcmTokenString || cleanDeviceId,
+        deviceType: platform === 'Android' ? 'android' : 'desktop',
+        browser: browser,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastSeenAt: serverTimestamp()
+      }, { merge: true });
+    } catch {}
+
+    return { success: true, deviceId: cleanDeviceId };
   } catch (err: any) {
-    console.error('Error registering push token in Firestore:', err);
-    return { success: false, error: err.message || 'Failed to save push token.' };
+    console.error('Error registering communication device in Firestore:', err);
+    return { success: false, error: err.message || 'Failed to register communication device.' };
   }
 };
 
-// 2. Initialize FCM and Request Notification Permission
+// Deactivate device on user logout or session termination
+export const deactivateCommunicationDevice = async (
+  user: AuthUser
+): Promise<void> => {
+  if (!user || !user.uid) return;
+  try {
+    const rawDeviceId = getPersistentDeviceId();
+    const cleanDeviceId = `dev_${user.uid}_${rawDeviceId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const deviceDocRef = doc(db, 'communication_devices', cleanDeviceId);
+    
+    await updateDoc(deviceDocRef, {
+      isActive: false,
+      lastSeenAt: new Date().toISOString(),
+      updatedAt: serverTimestamp()
+    });
+  } catch (err) {
+    console.warn('Deactivate device notice:', err);
+  }
+};
+
+// ============================================================================
+// STEP 15: Request Permission & Obtain FCM Token
+// ============================================================================
+
 export const requestNotificationPermissionAndRegisterToken = async (
   user: AuthUser
 ): Promise<{ success: boolean; token?: string; error?: string; permissionGranted?: boolean }> => {
@@ -291,6 +397,8 @@ export const requestNotificationPermissionAndRegisterToken = async (
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
+      // Record denied/default status
+      await registerCommunicationDevice(user, '', permission as DevicePermissionStatus);
       return { 
         success: false, 
         permissionGranted: false, 
@@ -303,7 +411,6 @@ export const requestNotificationPermissionAndRegisterToken = async (
 
     if (messagingSupported) {
       try {
-        // Register service worker
         let swRegistration: ServiceWorkerRegistration | undefined;
         if ('serviceWorker' in navigator) {
           swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
@@ -315,8 +422,7 @@ export const requestNotificationPermissionAndRegisterToken = async (
           vapidKey: (import.meta as any).env?.VITE_FIREBASE_VAPID_KEY || undefined
         });
       } catch (fcmErr: any) {
-        console.warn('FCM getToken notice:', fcmErr?.message || fcmErr);
-        // Fallback token identifier for PWA/Web push state in Firestore
+        console.warn('FCM getToken notice (falling back to PWA web push identifier):', fcmErr?.message || fcmErr);
         tokenString = `pwa_web_push_${user.uid}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       }
     } else {
@@ -324,12 +430,12 @@ export const requestNotificationPermissionAndRegisterToken = async (
     }
 
     if (tokenString) {
-      await registerPushTokenInFirestore(user, tokenString);
+      await registerCommunicationDevice(user, tokenString, 'granted');
       await unlockAudioEngine();
-      await displaySystemNotification('Glowzaa B2B Notifications Enabled 🔔', {
-        body: 'System push alerts and sound chimes are now active on your device.',
+      await displaySystemNotification('Glowzaa Notifications Activated 🔔', {
+        body: 'Push alerts and chime sounds are now active for wholesale commerce updates.',
         priority: 'normal',
-        tag: `permission_welcome_${Date.now()}`
+        tag: `perm_welcome_${Date.now()}`
       });
       return { success: true, token: tokenString, permissionGranted: true };
     }
@@ -341,127 +447,171 @@ export const requestNotificationPermissionAndRegisterToken = async (
   }
 };
 
-// 3. Send Staff Notification in Firestore (/staff_notifications)
-export const sendStaffNotificationInFirestore = async (
+// ============================================================================
+// STEP 15: Send Push Notification in `communication_notifications`
+// ============================================================================
+
+export interface SendCommunicationNotificationPayload {
+  recipientUserId: string; // 'all' | 'role:sales' | 'role:delivery' | 'role:admin' | user UID
+  recipientRole: 'all' | 'sales' | 'delivery' | 'admin' | 'individual' | string;
+  recipientUserName?: string;
+  title: string;
+  body: string;
+  type: CommunicationNotificationType;
+  priority: 'normal' | 'important' | 'urgent';
+  actionType: CommunicationActionType;
+  actionTarget?: string;
+  relatedId?: string | null;
+}
+
+export const sendCommunicationNotification = async (
   sender: AuthUser,
-  payload: {
-    recipientUserId: string; // 'all' or specific user UID or 'role:sales', 'role:delivery'
-    recipientUserName?: string;
-    recipientRole: string;
-    title: string;
-    message: string;
-    type: NotificationType;
-    priority: NotificationPriority;
-    relatedOrderId?: string;
-    relatedOrderNumber?: string;
-    relatedCustomerId?: string;
-    relatedCustomerName?: string;
-    actionUrl?: string;
-  }
+  payload: SendCommunicationNotificationPayload
 ): Promise<{ success: boolean; notificationId?: string; error?: string }> => {
   if (!sender || !sender.uid) {
     return { success: false, error: 'Authenticated sender profile is required.' };
   }
-  if (!payload.title.trim() || !payload.message.trim()) {
+  if (!payload.title.trim() || !payload.body.trim()) {
     return { success: false, error: 'Notification title and message content are required.' };
   }
 
   try {
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const notifDocRef = doc(db, 'staff_notifications', notifId);
+    const notifDocRef = doc(db, 'communication_notifications', notifId);
     const nowIso = new Date().toISOString();
 
-    const rawNotifRecord: Record<string, any> = {
+    const newRecord: CommunicationNotification = {
       id: notifId,
-      notificationId: notifId,
       recipientUserId: payload.recipientUserId,
-      recipientUserName: payload.recipientUserName || (payload.recipientUserId === 'all' ? 'All Glowzaa Staff' : payload.recipientRole.toUpperCase() + ' Team'),
       recipientRole: payload.recipientRole,
+      recipientUserName: payload.recipientUserName || (
+        payload.recipientUserId === 'all' ? 'All Staff' : 
+        payload.recipientRole === 'sales' ? 'Sales Team' : 
+        payload.recipientRole === 'delivery' ? 'Delivery Fleet' : 'Staff Member'
+      ),
       senderUserId: sender.uid,
-      senderUserName: sender.name,
+      senderName: sender.name || 'Admin HQ',
       senderRole: sender.role,
-      title: payload.title.trim(),
-      message: payload.message.trim(),
       type: payload.type,
+      title: payload.title.trim(),
+      body: payload.body.trim(),
       priority: payload.priority,
-      ...(payload.relatedOrderId ? { relatedOrderId: payload.relatedOrderId } : {}),
-      ...(payload.relatedOrderNumber ? { relatedOrderNumber: payload.relatedOrderNumber } : {}),
-      ...(payload.relatedCustomerId ? { relatedCustomerId: payload.relatedCustomerId } : {}),
-      ...(payload.relatedCustomerName ? { relatedCustomerName: payload.relatedCustomerName } : {}),
-      ...(payload.actionUrl ? { actionUrl: payload.actionUrl } : (payload.relatedOrderId ? { actionUrl: `/orders/${payload.relatedOrderId}` } : {})),
-      createdAt: nowIso,
-      sentAt: nowIso,
-      status: 'sent',
-      isRead: false
+      actionType: payload.actionType || 'none',
+      actionTarget: payload.actionTarget || undefined,
+      relatedId: payload.relatedId || null,
+      isRead: false,
+      createdAt: nowIso
     };
 
-    // Remove any undefined properties to prevent Firestore setDoc error
-    const cleanedNotifRecord: Record<string, any> = {};
-    for (const [key, val] of Object.entries(rawNotifRecord)) {
+    // Remove any undefined properties
+    const cleanedRecord: Record<string, any> = {};
+    for (const [key, val] of Object.entries(newRecord)) {
       if (val !== undefined) {
-        cleanedNotifRecord[key] = val;
+        cleanedRecord[key] = val;
       }
     }
 
     await setDoc(notifDocRef, {
-      ...cleanedNotifRecord,
-      createdAt: serverTimestamp(),
-      sentAt: serverTimestamp()
+      ...cleanedRecord,
+      createdAt: serverTimestamp()
     });
 
-    // Display System Notification with Audio Chime and SW Push Banner
+    // Write real Audit Log for admin dispatched notification
+    try {
+      const auditLogId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const auditRef = doc(db, 'audit_logs', auditLogId);
+      await setDoc(auditRef, {
+        id: auditLogId,
+        action: 'NOTIFICATION_SENT',
+        targetUserId: payload.recipientUserId,
+        targetUserName: payload.recipientUserName || payload.recipientRole,
+        targetRole: payload.recipientRole,
+        performedByUserId: sender.uid,
+        performedByUserName: sender.name,
+        timestamp: nowIso,
+        details: `Dispatched [${payload.priority.toUpperCase()}] ${payload.type} notification: "${payload.title.trim()}" to ${payload.recipientRole}`
+      });
+    } catch (logErr) {
+      console.warn('Audit log write notice:', logErr);
+    }
+
+    // Legacy sync to staff_notifications for backward compatibility
+    try {
+      const legacyRef = doc(db, 'staff_notifications', notifId);
+      await setDoc(legacyRef, {
+        id: notifId,
+        notificationId: notifId,
+        recipientUserId: payload.recipientUserId,
+        recipientUserName: newRecord.recipientUserName,
+        recipientRole: payload.recipientRole,
+        senderUserId: sender.uid,
+        senderUserName: sender.name,
+        senderRole: sender.role,
+        title: payload.title.trim(),
+        message: payload.body.trim(),
+        type: payload.type === 'message' ? 'admin_note' : payload.type === 'field' ? 'field_task' : payload.type,
+        priority: payload.priority,
+        status: 'sent',
+        isRead: false,
+        createdAt: serverTimestamp(),
+        sentAt: serverTimestamp()
+      });
+    } catch {}
+
+    // Dispatch local notification sound / banner if recipient includes sender
     if (typeof window !== 'undefined') {
       try {
-        if (payload.recipientUserId === 'all' || payload.recipientUserId === sender.uid || payload.recipientRole === sender.role) {
+        if (payload.recipientUserId === 'all' || payload.recipientUserId === sender.uid) {
           await displaySystemNotification(payload.title, {
-            body: payload.message,
+            body: payload.body,
             priority: payload.priority,
-            tag: notifId,
-            actionUrl: cleanedNotifRecord.actionUrl
+            tag: notifId
           });
         }
       } catch (err) {
-        console.warn('Local dispatch system notification notice:', err);
+        console.warn('Local dispatch notice:', err);
       }
     }
 
     return { success: true, notificationId: notifId };
   } catch (err: any) {
-    console.error('Error creating staff notification document:', err);
-    return { success: false, error: err.message || 'Failed to dispatch staff notification.' };
+    console.error('Error dispatching communication notification:', err);
+    return { success: false, error: err.message || 'Failed to dispatch notification.' };
   }
 };
 
-// 4. Subscribe Live Staff Notifications for current logged-in user
-export const subscribeStaffNotifications = (
+// ============================================================================
+// STEP 15: Real-time Subscriptions for Notifications & Devices
+// ============================================================================
+
+export const subscribeCommunicationNotifications = (
   currentUser: AuthUser,
-  callback: (notifications: StaffNotification[]) => void
+  callback: (notifications: CommunicationNotification[]) => void
 ): (() => void) => {
   if (!currentUser || !currentUser.uid) {
     callback([]);
     return () => {};
   }
 
-  const notifRef = collection(db, 'staff_notifications');
-  // Order by createdAt desc
-  const q = query(notifRef, orderBy('createdAt', 'desc'), limit(100));
+  const notifRef = collection(db, 'communication_notifications');
+  const q = query(notifRef, orderBy('createdAt', 'desc'), limit(150));
 
   return onSnapshot(q, (snapshot) => {
-    const list: StaffNotification[] = [];
+    const list: CommunicationNotification[] = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
       const recId = data.recipientUserId;
       const recRole = data.recipientRole;
       const isSender = data.senderUserId === currentUser.uid;
 
-      // Filter relevance for logged in user:
-      // Admin sees all. Non-admin sees notifications targeted to 'all', their role ('role:sales' or recRole==user.role), their specific uid/loginId/staffId, or sent by them.
+      // Role and user matching logic
       const isDirectMatch = 
         recId === currentUser.uid ||
         (currentUser.id && recId === currentUser.id) ||
         (currentUser.loginId && recId === currentUser.loginId) ||
         (currentUser.staffId && recId === currentUser.staffId) ||
         (currentUser.salesStaffId && recId === currentUser.salesStaffId) ||
+        (currentUser.deliveryStaffId && recId === currentUser.deliveryStaffId) ||
         (currentUser.email && recId === currentUser.email);
 
       const isRoleMatch = 
@@ -471,13 +621,13 @@ export const subscribeStaffNotifications = (
         recRole === 'all' ||
         recId === 'all';
 
-      const isForMe = 
+      const isRelevant = 
         currentUser.role === 'admin' ||
         isDirectMatch ||
         isRoleMatch ||
         isSender;
 
-      if (isForMe) {
+      if (isRelevant) {
         let createdAtIso = new Date().toISOString();
         if (data.createdAt) {
           if (typeof data.createdAt === 'string') createdAtIso = data.createdAt;
@@ -486,15 +636,7 @@ export const subscribeStaffNotifications = (
           }
         }
 
-        let sentAtIso = undefined;
-        if (data.sentAt) {
-          if (typeof data.sentAt === 'string') sentAtIso = data.sentAt;
-          else if (typeof data.sentAt.toDate === 'function') {
-            try { sentAtIso = data.sentAt.toDate().toISOString(); } catch {}
-          }
-        }
-
-        let readAtIso = undefined;
+        let readAtIso: string | null = null;
         if (data.readAt) {
           if (typeof data.readAt === 'string') readAtIso = data.readAt;
           else if (typeof data.readAt.toDate === 'function') {
@@ -504,49 +646,49 @@ export const subscribeStaffNotifications = (
 
         list.push({
           id: docSnap.id,
-          notificationId: data.notificationId || docSnap.id,
-          recipientUserId: data.recipientUserId,
+          recipientUserId: data.recipientUserId || 'all',
+          recipientRole: data.recipientRole || 'all',
           recipientUserName: data.recipientUserName,
-          recipientRole: data.recipientRole,
-          senderUserId: data.senderUserId,
-          senderUserName: data.senderUserName,
-          senderRole: data.senderRole,
+          senderUserId: data.senderUserId || 'admin',
+          senderName: data.senderName || 'Admin HQ',
+          senderRole: data.senderRole || 'admin',
+          type: (data.type as CommunicationNotificationType) || 'announcement',
           title: data.title || 'Notification',
-          message: data.message || '',
-          type: data.type || 'system',
+          body: data.body || data.message || '',
           priority: data.priority || 'normal',
-          relatedOrderId: data.relatedOrderId,
-          relatedOrderNumber: data.relatedOrderNumber,
-          relatedCustomerId: data.relatedCustomerId,
-          relatedCustomerName: data.relatedCustomerName,
-          actionUrl: data.actionUrl,
+          actionType: (data.actionType as CommunicationActionType) || 'none',
+          actionTarget: data.actionTarget,
+          relatedId: data.relatedId || data.relatedOrderId || null,
+          isRead: Boolean(data.isRead),
           createdAt: createdAtIso,
-          sentAt: sentAtIso,
           readAt: readAtIso,
-          status: data.status || 'sent',
-          isRead: Boolean(data.isRead)
+          expiresAt: data.expiresAt || null
         });
       }
     });
 
     callback(list);
   }, (err) => {
-    console.warn('Firestore live notifications subscription notice:', err);
+    console.warn('Firestore communication notifications subscription notice:', err);
     callback([]);
   });
 };
 
-// 5. Mark single notification as read in Firestore
-export const markNotificationAsReadInFirestore = async (
+export const markCommunicationNotificationAsRead = async (
   notificationId: string
 ): Promise<{ success: boolean; error?: string }> => {
   if (!notificationId) return { success: false, error: 'Notification ID required.' };
   try {
-    const docRef = doc(db, 'staff_notifications', notificationId);
+    const docRef = doc(db, 'communication_notifications', notificationId);
     await updateDoc(docRef, {
       isRead: true,
       readAt: new Date().toISOString()
     });
+    // Also try updating legacy staff_notifications if it exists
+    try {
+      const legacyRef = doc(db, 'staff_notifications', notificationId);
+      await updateDoc(legacyRef, { isRead: true, readAt: new Date().toISOString() });
+    } catch {}
     return { success: true };
   } catch (err: any) {
     console.error('Error marking notification as read:', err);
@@ -554,9 +696,8 @@ export const markNotificationAsReadInFirestore = async (
   }
 };
 
-// 6. Mark ALL unread notifications as read for current user
-export const markAllNotificationsAsReadInFirestore = async (
-  unreadNotifications: StaffNotification[]
+export const markAllCommunicationNotificationsAsRead = async (
+  unreadNotifications: CommunicationNotification[]
 ): Promise<{ success: boolean; count?: number; error?: string }> => {
   if (!unreadNotifications || unreadNotifications.length === 0) {
     return { success: true, count: 0 };
@@ -568,7 +709,7 @@ export const markAllNotificationsAsReadInFirestore = async (
     
     unreadNotifications.forEach((n) => {
       if (!n.isRead) {
-        const ref = doc(db, 'staff_notifications', n.id);
+        const ref = doc(db, 'communication_notifications', n.id);
         batch.update(ref, {
           isRead: true,
           readAt: nowIso
@@ -587,64 +728,92 @@ export const markAllNotificationsAsReadInFirestore = async (
   }
 };
 
-// 7. Delete notification from Firestore
-export const deleteNotificationInFirestore = async (
+export const deleteCommunicationNotification = async (
   notificationId: string
 ): Promise<{ success: boolean; error?: string }> => {
   if (!notificationId) return { success: false, error: 'Notification ID required.' };
   try {
-    await deleteDoc(doc(db, 'staff_notifications', notificationId));
+    await deleteDoc(doc(db, 'communication_notifications', notificationId));
+    try {
+      await deleteDoc(doc(db, 'staff_notifications', notificationId));
+    } catch {}
     return { success: true };
   } catch (err: any) {
-    console.error('Error deleting notification:', err);
+    console.error('Error deleting communication notification:', err);
     return { success: false, error: err.message };
   }
 };
 
-// 8. Subscribe registered Push Tokens (for Admin Staff Token Registry view)
-export const subscribeStaffPushTokens = (
-  callback: (tokens: StaffPushToken[]) => void
+// Subscribe all registered devices for Admin Registered Devices View
+export const subscribeCommunicationDevices = (
+  callback: (devices: CommunicationDevice[]) => void
 ): (() => void) => {
-  const tokensRef = collection(db, 'staff_push_tokens');
-  const q = query(tokensRef, orderBy('updatedAt', 'desc'), limit(150));
+  const devicesRef = collection(db, 'communication_devices');
+  const q = query(devicesRef, orderBy('lastSeenAt', 'desc'), limit(150));
 
   return onSnapshot(q, (snapshot) => {
-    const list: StaffPushToken[] = [];
+    const list: CommunicationDevice[] = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
-      let updatedAtIso = new Date().toISOString();
-      if (data.updatedAt) {
-        if (typeof data.updatedAt === 'string') updatedAtIso = data.updatedAt;
-        else if (typeof data.updatedAt.toDate === 'function') {
-          try { updatedAtIso = data.updatedAt.toDate().toISOString(); } catch {}
+      let lastSeenAtIso = new Date().toISOString();
+      if (data.lastSeenAt) {
+        if (typeof data.lastSeenAt === 'string') lastSeenAtIso = data.lastSeenAt;
+        else if (typeof data.lastSeenAt.toDate === 'function') {
+          try { lastSeenAtIso = data.lastSeenAt.toDate().toISOString(); } catch {}
+        }
+      }
+
+      let createdAtIso = lastSeenAtIso;
+      if (data.createdAt) {
+        if (typeof data.createdAt === 'string') createdAtIso = data.createdAt;
+        else if (typeof data.createdAt.toDate === 'function') {
+          try { createdAtIso = data.createdAt.toDate().toISOString(); } catch {}
         }
       }
 
       list.push({
         id: docSnap.id,
-        tokenId: data.tokenId || docSnap.id,
         userId: data.userId,
-        userLoginId: data.userLoginId,
-        userName: data.userName,
-        role: data.role,
-        token: data.token,
-        deviceType: data.deviceType || 'unknown',
-        browser: data.browser || 'Unknown Browser',
-        userAgent: data.userAgent,
-        createdAt: data.createdAt || updatedAtIso,
-        updatedAt: updatedAtIso,
-        lastSeenAt: data.lastSeenAt || updatedAtIso,
-        isActive: Boolean(data.isActive)
+        role: data.role || 'sales',
+        userName: data.userName || 'Staff Member',
+        platform: data.platform || 'Unknown',
+        browser: data.browser || 'Unknown',
+        deviceLabel: data.deviceLabel || `${data.platform || 'Device'} • ${data.browser || 'Browser'}`,
+        fcmToken: data.fcmToken || '',
+        permissionStatus: data.permissionStatus || 'default',
+        isActive: Boolean(data.isActive),
+        lastSeenAt: lastSeenAtIso,
+        createdAt: createdAtIso,
+        updatedAt: data.updatedAt || lastSeenAtIso
       });
     });
     callback(list);
   }, (err) => {
-    console.warn('Firestore live push tokens subscription notice:', err);
+    console.warn('Firestore communication devices subscription notice:', err);
     callback([]);
   });
 };
 
-// 9. Foreground Messaging Listener (if FCM messaging is supported)
+// Admin Action: Deactivate device record
+export const setDeviceActiveStatus = async (
+  deviceId: string,
+  isActive: boolean
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const devRef = doc(db, 'communication_devices', deviceId);
+    await updateDoc(devRef, {
+      isActive: isActive,
+      updatedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+// ============================================================================
+// Foreground Messaging Listener
+// ============================================================================
 export const listenForegroundPushMessages = (
   onPushReceived: (payload: any) => void
 ): (() => void) => {
@@ -656,7 +825,6 @@ export const listenForegroundPushMessages = (
       try {
         const messaging = getMessaging(app);
         unsubscribe = onMessage(messaging, (payload) => {
-          console.log('Foreground Push Message received:', payload);
           onPushReceived(payload);
         });
       } catch (e) {
@@ -668,4 +836,98 @@ export const listenForegroundPushMessages = (
   return () => {
     unsubscribe();
   };
+};
+
+// ============================================================================
+// Backward Compatibility Wrappers for existing code
+// ============================================================================
+export const registerPushTokenInFirestore = async (user: AuthUser, tokenString: string) => {
+  return registerCommunicationDevice(user, tokenString, 'granted');
+};
+
+export const sendStaffNotificationInFirestore = async (
+  sender: AuthUser,
+  payload: any
+) => {
+  return sendCommunicationNotification(sender, {
+    recipientUserId: payload.recipientUserId,
+    recipientRole: payload.recipientRole,
+    recipientUserName: payload.recipientUserName,
+    title: payload.title,
+    body: payload.message,
+    type: payload.type === 'admin_note' ? 'message' : payload.type === 'field_task' ? 'field' : (payload.type as CommunicationNotificationType) || 'announcement',
+    priority: payload.priority,
+    actionType: payload.relatedOrderId ? 'order' : 'none',
+    actionTarget: payload.actionUrl || payload.relatedOrderId,
+    relatedId: payload.relatedOrderId
+  });
+};
+
+export const subscribeStaffNotifications = (
+  currentUser: AuthUser,
+  callback: (notifications: StaffNotification[]) => void
+) => {
+  return subscribeCommunicationNotifications(currentUser, (comList) => {
+    const staffList: StaffNotification[] = comList.map(c => ({
+      id: c.id,
+      notificationId: c.id,
+      recipientUserId: c.recipientUserId,
+      recipientUserName: c.recipientUserName,
+      recipientRole: c.recipientRole,
+      senderUserId: c.senderUserId,
+      senderUserName: c.senderName,
+      senderRole: c.senderRole || 'admin',
+      title: c.title,
+      message: c.body,
+      type: (c.type === 'message' ? 'admin_note' : c.type === 'field' ? 'field_task' : c.type) as NotificationType,
+      priority: c.priority,
+      relatedOrderId: c.relatedId || undefined,
+      actionUrl: c.actionTarget,
+      createdAt: c.createdAt,
+      sentAt: c.createdAt,
+      readAt: c.readAt || undefined,
+      status: 'sent',
+      isRead: c.isRead
+    }));
+    callback(staffList);
+  });
+};
+
+export const markNotificationAsReadInFirestore = markCommunicationNotificationAsRead;
+export const markAllNotificationsAsReadInFirestore = async (notifs: StaffNotification[]) => {
+  const comNotifs: CommunicationNotification[] = notifs.map(n => ({
+    id: n.id,
+    recipientUserId: n.recipientUserId,
+    recipientRole: n.recipientRole as any,
+    senderUserId: n.senderUserId,
+    senderName: n.senderUserName,
+    type: 'announcement',
+    title: n.title,
+    body: n.message,
+    priority: n.priority,
+    actionType: 'none',
+    isRead: n.isRead,
+    createdAt: n.createdAt
+  }));
+  return markAllCommunicationNotificationsAsRead(comNotifs);
+};
+export const deleteNotificationInFirestore = deleteCommunicationNotification;
+export const subscribeStaffPushTokens = (callback: (tokens: StaffPushToken[]) => void) => {
+  return subscribeCommunicationDevices((devices) => {
+    const tokens: StaffPushToken[] = devices.map(d => ({
+      id: d.id,
+      tokenId: d.id,
+      userId: d.userId,
+      userName: d.userName,
+      role: d.role,
+      token: d.fcmToken,
+      deviceType: d.platform === 'Android' ? 'android' : 'desktop',
+      browser: d.browser,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      lastSeenAt: d.lastSeenAt,
+      isActive: d.isActive
+    }));
+    callback(tokens);
+  });
 };

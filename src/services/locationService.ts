@@ -102,14 +102,132 @@ export interface GeolocationCoordinatesClean {
   timestamp: number;
 }
 
-// Configurable Phase 3 Constants
+// Configurable Phase 4.1 Constants
 export const SHOP_CHECKIN_RADIUS_METERS = 100; // Geofence check-in radius (100 meters)
-export const MAX_ACCEPTABLE_ACCURACY_METERS = 80; // Above 80m is considered POOR / untrusted for verification
-export const EXCELLENT_ACCURACY_THRESHOLD_METERS = 30; // <= 30m is GOOD
+export const SHOP_EXIT_RADIUS_METERS = 150; // Geofence exit radius with hysteresis (150 meters)
+export const MIN_VISIT_DWELL_MS = 3 * 60 * 1000; // 3 minutes minimum dwell required
+export const MAX_ACCEPTABLE_ACCURACY_METERS = 75; // Phase 4.1: Max 75m accuracy accepted for visit verification
+export const EXCELLENT_ACCURACY_THRESHOLD_METERS = 30; // <= 30m is EXCELLENT
 
-// Throttling constants
-export const MIN_PING_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+// Freshness thresholds (Phase 4.1 Specification)
+export const GPS_LIVE_THRESHOLD_MS = 3 * 60 * 1000; // 0–3 minutes: LIVE
+export const GPS_DELAYED_THRESHOLD_MS = 7 * 60 * 1000; // 3–7 minutes: DELAYED
+export const GPS_STALE_THRESHOLD_MS = 15 * 60 * 1000; // 7–15 minutes: STALE
+// 15+ minutes or no GPS: UNAVAILABLE
+
+// Throttling constants (Send ping every 3 minutes or on 200m movement)
+export const MIN_PING_INTERVAL_MS = 180 * 1000; // 3 minutes (180,000 ms)
 export const MIN_PING_DISTANCE_METERS = 200; // 200 meters
+
+/**
+ * Diagnostic logger for Field GPS lifecycle in development mode.
+ */
+export function logGpsDiagnostic(event: string, details?: any): void {
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[FIELD-GPS] ${event}`, details !== undefined ? details : '');
+  }
+}
+
+/**
+ * Evaluates GPS freshness independently of Field Duty status (Phase 4.1 State Separation).
+ * - Live: 0–3 minutes
+ * - Delayed: 3–7 minutes
+ * - Stale: 7–15 minutes
+ * - Unavailable: 15+ minutes or no valid timestamp
+ */
+export function evaluateGpsFreshness(lastLocationUpdateAt?: string | null): {
+  freshness: 'live' | 'delayed' | 'stale' | 'unavailable';
+  minutesAgo: number;
+  label: string;
+  badgeBg: string;
+  dotColor: string;
+} {
+  if (!lastLocationUpdateAt) {
+    return {
+      freshness: 'unavailable',
+      minutesAgo: 999,
+      label: 'UNAVAILABLE',
+      badgeBg: 'bg-slate-100 text-slate-600 border-slate-200',
+      dotColor: 'bg-slate-400'
+    };
+  }
+
+  const updateMs = new Date(lastLocationUpdateAt).getTime();
+  if (isNaN(updateMs)) {
+    return {
+      freshness: 'unavailable',
+      minutesAgo: 999,
+      label: 'UNAVAILABLE',
+      badgeBg: 'bg-slate-100 text-slate-600 border-slate-200',
+      dotColor: 'bg-slate-400'
+    };
+  }
+
+  const diffMs = Math.max(0, Date.now() - updateMs);
+  const minutesAgo = Math.floor(diffMs / 60000);
+
+  if (diffMs <= GPS_LIVE_THRESHOLD_MS) {
+    return {
+      freshness: 'live',
+      minutesAgo,
+      label: 'LIVE',
+      badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      dotColor: 'bg-emerald-500'
+    };
+  } else if (diffMs <= GPS_DELAYED_THRESHOLD_MS) {
+    return {
+      freshness: 'delayed',
+      minutesAgo,
+      label: 'DELAYED',
+      badgeBg: 'bg-amber-50 text-amber-700 border-amber-200',
+      dotColor: 'bg-amber-500'
+    };
+  } else if (diffMs <= GPS_STALE_THRESHOLD_MS) {
+    return {
+      freshness: 'stale',
+      minutesAgo,
+      label: 'STALE',
+      badgeBg: 'bg-orange-50 text-orange-700 border-orange-200',
+      dotColor: 'bg-orange-500'
+    };
+  } else {
+    return {
+      freshness: 'unavailable',
+      minutesAgo,
+      label: 'UNAVAILABLE',
+      badgeBg: 'bg-slate-100 text-slate-600 border-slate-200',
+      dotColor: 'bg-slate-400'
+    };
+  }
+}
+
+/**
+ * Evaluates Field Duty Tracking Status.
+ * CRITICAL RULE: If fieldDutySession.status === 'active', trackingStatus MUST BE 'on_field' (ON FIELD),
+ * regardless of whether GPS is live, delayed, stale, or unavailable.
+ */
+export function evaluateTrackingStatus(session?: { status?: string } | null): {
+  trackingStatus: 'on_field' | 'off_duty';
+  label: string;
+  isOnField: boolean;
+  badgeBg: string;
+} {
+  if (session && session.status === 'active') {
+    return {
+      trackingStatus: 'on_field',
+      label: 'ON FIELD',
+      isOnField: true,
+      badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-300'
+    };
+  }
+
+  return {
+    trackingStatus: 'off_duty',
+    label: 'OFF DUTY',
+    isOnField: false,
+    badgeBg: 'bg-slate-100 text-slate-600 border-slate-200'
+  };
+}
 
 /**
  * Validates GPS accuracy against Phase 3 business rules:
@@ -441,8 +559,12 @@ export function requestCurrentLocation(options?: PositionOptions): Promise<Geolo
     };
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve(pos),
+      (pos) => {
+        logGpsDiagnostic('position received (accuracy: ±' + Math.round(pos.coords.accuracy) + 'm)');
+        resolve(pos);
+      },
       (err) => {
+        logGpsDiagnostic('GPS error on getCurrentPosition', err.message);
         if (err.code === err.PERMISSION_DENIED) {
           return reject(new Error('Location permission is required. Please allow location access in browser settings.'));
         }
@@ -450,7 +572,10 @@ export function requestCurrentLocation(options?: PositionOptions): Promise<Geolo
         // Fallback attempt with enableHighAccuracy: false if high accuracy timed out or failed
         if (defaultOptions.enableHighAccuracy) {
           navigator.geolocation.getCurrentPosition(
-            (fallbackPos) => resolve(fallbackPos),
+            (fallbackPos) => {
+              logGpsDiagnostic('position received fallback (accuracy: ±' + Math.round(fallbackPos.coords.accuracy) + 'm)');
+              resolve(fallbackPos);
+            },
             (fallbackErr) => {
               let message = 'Failed to acquire device location.';
               switch (fallbackErr.code) {
@@ -464,6 +589,7 @@ export function requestCurrentLocation(options?: PositionOptions): Promise<Geolo
                   message = 'Location request timed out. Please retry or check device location settings.';
                   break;
               }
+              logGpsDiagnostic('GPS fallback error', message);
               reject(new Error(message));
             },
             {
@@ -514,6 +640,7 @@ export async function getCurrentLocation(options?: PositionOptions): Promise<{
 
 /**
  * Starts continuous location monitoring via navigator.geolocation.watchPosition().
+ * Phase 4.1 Requirement: Enforces single watcher instance across applet.
  */
 export function startWatchingLocation(
   onPosition: (pos: GeolocationPosition) => void,
@@ -524,12 +651,12 @@ export function startWatchingLocation(
     return null;
   }
 
-  // Clear any existing active watch before creating a new one
+  // Clear any existing active watch before creating a new one (Single Watcher rule)
   stopWatchingLocation();
 
   const defaultOptions: PositionOptions = {
     enableHighAccuracy: true,
-    timeout: 15000,
+    timeout: 30000,
     maximumAge: 30000,
     ...options
   };
@@ -537,13 +664,16 @@ export function startWatchingLocation(
   try {
     activeWatchId = navigator.geolocation.watchPosition(
       (position) => {
+        logGpsDiagnostic('position received (accuracy: ±' + Math.round(position.coords.accuracy) + 'm)');
         onPosition(position);
       },
       (error) => {
+        logGpsDiagnostic('GPS error in watchPosition', error.message);
         onError(error);
       },
       defaultOptions
     );
+    logGpsDiagnostic('watcher started (id: ' + activeWatchId + ')');
     return activeWatchId;
   } catch (err) {
     console.error('Error starting geolocation watch:', err);
@@ -566,11 +696,12 @@ export function stopWatchingLocation(watchId?: number | null): void {
   if (idToClear !== null && idToClear !== undefined) {
     try {
       navigator.geolocation.clearWatch(idToClear);
+      logGpsDiagnostic('watcher stopped (id: ' + idToClear + ')');
     } catch (err) {
       console.warn('Error clearing geolocation watch:', err);
     }
   }
-  if (idToClear === activeWatchId) {
+  if (idToClear === activeWatchId || watchId === undefined) {
     activeWatchId = null;
   }
 }

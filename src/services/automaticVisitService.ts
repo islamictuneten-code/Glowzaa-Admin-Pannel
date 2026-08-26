@@ -18,11 +18,11 @@ import { Customer, CustomerVisit, CustomerVisitOutcome, FieldDutySession, AuthUs
 import { calculateDistanceMeters, validateLocationAccuracy } from './locationService';
 import { cleanUndefined } from './firestoreService';
 
-// Geofence & Detection Constants
+// Geofence & Detection Constants (Phase 4.1 Specification)
 export const ENTRY_RADIUS_METERS = 100;
 export const EXIT_RADIUS_METERS = 150;
 export const MIN_VISIT_DWELL_MS = 3 * 60 * 1000; // 3 minutes
-export const MAX_ACCEPTABLE_ACCURACY_METERS = 80;
+export const MAX_ACCEPTABLE_ACCURACY_METERS = 75; // Phase 4.1: max 75m accuracy accepted for visit detection
 
 export interface DwellCandidateState {
   customerId: string;
@@ -82,9 +82,9 @@ export async function processLocationForAutomaticVisits(params: {
     return { actionTaken: 'none' };
   }
 
-  // 1. Filter out poor GPS accuracy (> 80m) to prevent false geofence triggers
+  // 1. Filter out poor GPS accuracy (> 75m) to prevent false geofence triggers
   const accuracyVal = validateLocationAccuracy(accuracy);
-  if (!accuracyVal.isAcceptable) {
+  if (!accuracyVal.isAcceptable || accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
     return { actionTaken: 'none' };
   }
 
@@ -141,6 +141,19 @@ export async function processLocationForAutomaticVisits(params: {
             }
           } catch (err) {
             console.error('Error auto-completing customer visit:', err);
+            // Save to offline queue if failed
+            savePendingVisitOffline({
+              type: 'close_visit',
+              visitId: currentCandidate.visitDocId,
+              data: {
+                checkOutLatitude: currentLat,
+                checkOutLongitude: currentLon,
+                checkOutAccuracyMeters: accuracy,
+                checkOutTime: nowIso,
+                durationMinutes: dwellMinutes,
+                sessionId: activeSession.id
+              }
+            });
           }
         } else if (dwellDurationMs >= MIN_VISIT_DWELL_MS) {
           // Met dwell threshold right upon exiting: record complete visit
@@ -167,6 +180,25 @@ export async function processLocationForAutomaticVisits(params: {
             }
           } catch (err) {
             console.error('Error creating auto visit on exit:', err);
+            savePendingVisitOffline({
+              type: 'create_and_complete',
+              data: {
+                sessionId: activeSession.id,
+                customerId: currentCustomer.id,
+                shopName: currentCustomer.shopName,
+                ownerName: currentCustomer.ownerName,
+                checkInTime: new Date(currentCandidate.enteredAtMs).toISOString(),
+                checkInLat: currentCandidate.lastLatitude,
+                checkInLon: currentCandidate.lastLongitude,
+                checkInAccuracy: currentCandidate.lastAccuracyMeters,
+                checkOutTime: nowIso,
+                checkOutLat: currentLat,
+                checkOutLon: currentLon,
+                checkOutAccuracy: accuracy,
+                durationMinutes: dwellMinutes,
+                distanceFromShopMeters: dist
+              }
+            });
           }
         }
 
@@ -218,6 +250,20 @@ export async function processLocationForAutomaticVisits(params: {
           }
         } catch (err) {
           console.error('Error auto-creating customer visit doc:', err);
+          savePendingVisitOffline({
+            type: 'create_active',
+            data: {
+              sessionId: activeSession.id,
+              customerId: currentCustomer.id,
+              shopName: currentCustomer.shopName,
+              ownerName: currentCustomer.ownerName,
+              checkInTime: new Date(currentCandidate.enteredAtMs).toISOString(),
+              checkInLat: currentCandidate.lastLatitude,
+              checkInLon: currentCandidate.lastLongitude,
+              checkInAccuracy: currentCandidate.lastAccuracyMeters,
+              distanceFromShopMeters: dist
+            }
+          });
         }
       }
 
@@ -292,7 +338,7 @@ export async function processLocationForAutomaticVisits(params: {
 }
 
 /**
- * Creates an active / ongoing CustomerVisit in Firestore automatically.
+ * Creates an active / ongoing CustomerVisit in Firestore automatically with duplicate protection.
  */
 async function autoCreateActiveCustomerVisit(
   currentUser: AuthUser,
@@ -309,6 +355,24 @@ async function autoCreateActiveCustomerVisit(
   }
 ): Promise<CustomerVisit | null> {
   try {
+    // Duplicate Protection: Check if unclosed visit already exists for this customer & user
+    try {
+      const existingQ = query(
+        collection(db, 'customer_visits'),
+        where('userId', '==', currentUser.uid),
+        where('customerId', '==', data.customerId),
+        where('checkOutTime', '==', null),
+        limit(1)
+      );
+      const existingSnap = await getDocs(existingQ);
+      if (!existingSnap.empty) {
+        const existingDoc = existingSnap.docs[0];
+        return { id: existingDoc.id, ...existingDoc.data() } as CustomerVisit;
+      }
+    } catch {
+      // Query fallback
+    }
+
     const visitRef = doc(collection(db, 'customer_visits'));
     const visitId = visitRef.id;
 
@@ -578,3 +642,62 @@ export async function autoLinkOrderOrPaymentToVisit(params: {
     console.warn('Could not auto-link order/payment to visit:', err);
   }
 }
+
+/**
+ * Offline Visits Queue Buffer & Flush Support (Phase 4 Hardening)
+ */
+const OFFLINE_VISITS_STORAGE_KEY = 'glowzaa_pending_visits_queue';
+
+export function savePendingVisitOffline(visitData: any): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const existingRaw = localStorage.getItem(OFFLINE_VISITS_STORAGE_KEY);
+    const list: any[] = existingRaw ? JSON.parse(existingRaw) : [];
+    list.push({ ...visitData, bufferedAt: new Date().toISOString() });
+    localStorage.setItem(OFFLINE_VISITS_STORAGE_KEY, JSON.stringify(list));
+  } catch (err) {
+    console.warn('Could not buffer visit offline:', err);
+  }
+}
+
+export async function flushPendingVisitsQueue(currentUser: AuthUser): Promise<number> {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage || !currentUser?.uid) return 0;
+    const existingRaw = localStorage.getItem(OFFLINE_VISITS_STORAGE_KEY);
+    if (!existingRaw) return 0;
+    const list: any[] = JSON.parse(existingRaw);
+    if (!Array.isArray(list) || list.length === 0) return 0;
+
+    let flushedCount = 0;
+    const remaining: any[] = [];
+
+    for (const item of list) {
+      try {
+        if (item.type === 'create_and_complete') {
+          await autoCreateAndCompleteVisit(currentUser, item.data);
+          flushedCount++;
+        } else if (item.type === 'create_active') {
+          await autoCreateActiveCustomerVisit(currentUser, item.data);
+          flushedCount++;
+        } else if (item.type === 'close_visit' && item.visitId) {
+          await autoCloseCustomerVisit(currentUser, item.visitId, item.data);
+          flushedCount++;
+        }
+      } catch (err) {
+        remaining.push(item);
+      }
+    }
+
+    if (remaining.length > 0) {
+      localStorage.setItem(OFFLINE_VISITS_STORAGE_KEY, JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(OFFLINE_VISITS_STORAGE_KEY);
+    }
+
+    return flushedCount;
+  } catch (err) {
+    console.warn('Error flushing pending visits queue:', err);
+    return 0;
+  }
+}
+

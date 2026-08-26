@@ -17,7 +17,7 @@ L.Marker.prototype.options.icon = defaultIcon;
 
 interface StaffMarkerData {
   session: FieldDutySession;
-  staleStatus: 'live' | 'stale' | 'offline';
+  staleStatus: 'live' | 'delayed' | 'stale' | 'unavailable';
   minutesAgo: number;
 }
 
@@ -114,16 +114,20 @@ export const AdminFieldTrackingMap: React.FC<AdminFieldTrackingMapProps> = ({
         const color =
           item.staleStatus === 'live'
             ? '#087F7A'
-            : item.staleStatus === 'stale'
+            : item.staleStatus === 'delayed'
             ? '#D97706'
+            : item.staleStatus === 'stale'
+            ? '#EA580C'
             : '#64748B';
 
         const statusLabel =
           item.staleStatus === 'live'
-            ? 'LIVE ON FIELD'
+            ? 'LIVE (<= 5m)'
+            : item.staleStatus === 'delayed'
+            ? 'DELAYED (5-10m)'
             : item.staleStatus === 'stale'
-            ? 'LOCATION STALE'
-            : 'OFFLINE / STALE';
+            ? 'STALE (> 10m)'
+            : 'NO GPS';
 
         // Custom HTML Marker with beacon ripple
         const customIcon = L.divIcon({
@@ -139,7 +143,7 @@ export const AdminFieldTrackingMap: React.FC<AdminFieldTrackingMapProps> = ({
                 ${item.session.userName ? item.session.userName.slice(0, 2).toUpperCase() : 'ST'}
               </div>
               <div style="position: absolute; bottom: -4px; right: 0; width: 12px; height: 12px; border-radius: 50%; background-color: ${
-                item.staleStatus === 'live' ? '#22C55E' : item.staleStatus === 'stale' ? '#F59E0B' : '#94A3B8'
+                item.staleStatus === 'live' ? '#22C55E' : item.staleStatus === 'delayed' ? '#F59E0B' : item.staleStatus === 'stale' ? '#EA580C' : '#94A3B8'
               }; border: 2px solid #ffffff; z-index: 11;"></div>
             </div>
           `,

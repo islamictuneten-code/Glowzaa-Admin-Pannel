@@ -1,8 +1,11 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, getFirestore, memoryLocalCache, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, memoryLocalCache, setLogLevel } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import rawConfig from '../../firebase-applet-config.json';
+
+// Set Firestore log level to suppress non-fatal transient connection warnings
+setLogLevel('error');
 
 export const firebaseConfig = {
   projectId: rawConfig?.projectId || (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || "gen-lang-client-0254663574",
@@ -46,21 +49,6 @@ try {
 
 export const db = firestoreInstance;
 
-// Validate connection on startup per Firebase skill specification
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error: any) {
-    const msg = error?.message || String(error);
-    const code = error?.code || '';
-    if (code === 'unavailable' || msg.includes('the client is offline') || msg.includes('Could not reach Cloud Firestore backend')) {
-      console.info("Firestore client operating with offline cache enabled. Auto-reconnecting when online.");
-    } else {
-      console.warn("Firebase connection test notice:", msg);
-    }
-  }
-}
-testConnection();
-
 export default app;
+
 

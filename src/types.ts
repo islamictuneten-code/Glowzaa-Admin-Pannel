@@ -93,6 +93,7 @@ export type ProductCategory =
 
 export type AdminTab = 
   | 'dashboard'
+  | 'messages'
   | 'field_tracking'
   | 'notifications'
   | 'products'
@@ -118,6 +119,7 @@ export type AdminTab =
 
 export type SalesTab = 
   | 'dashboard'
+  | 'messages'
   | 'customers'
   | 'products'
   | 'create_order'
@@ -131,6 +133,7 @@ export type SalesTab =
 
 export type DeliveryTab = 
   | 'dashboard'
+  | 'messages'
   | 'assigned_orders'
   | 'today_deliveries'
   | 'pending_deliveries'
@@ -848,6 +851,12 @@ export type LocationReadiness =
 
 export type FieldDutyStatus = 'active' | 'ended' | 'auto_closed';
 
+export type TrackingStatus = 'on_field' | 'off_duty';
+
+export type GpsFreshnessStatus = 'live' | 'delayed' | 'stale' | 'unavailable';
+
+export type NetworkConnectionStatus = 'online' | 'offline';
+
 export interface FieldDutySession {
   id: string;
   sessionId: string;
@@ -927,6 +936,76 @@ export interface CustomerVisit {
 // STEP 15: PUSH NOTIFICATIONS & STAFF COMMUNICATION TYPES
 // ============================================================================
 
+export type CommunicationDevicePlatform = 'Android' | 'Windows' | 'macOS' | 'iOS' | 'Linux' | 'Unknown';
+export type DevicePermissionStatus = 'granted' | 'denied' | 'default' | 'prompt';
+
+export interface CommunicationDevice {
+  id: string; // unique registration id e.g. `dev_${userId}_${sanitizedDeviceId}`
+  userId: string;
+  role: UserRole | string;
+  userName: string;
+  platform: CommunicationDevicePlatform | string;
+  browser: string;
+  deviceLabel: string;
+  fcmToken: string;
+  permissionStatus: DevicePermissionStatus;
+  isActive: boolean;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CommunicationNotificationType =
+  | 'message'
+  | 'announcement'
+  | 'urgent'
+  | 'order'
+  | 'delivery'
+  | 'payment'
+  | 'field'
+  | 'system';
+
+export type CommunicationActionType =
+  | 'none'
+  | 'communication'
+  | 'order'
+  | 'delivery'
+  | 'payment'
+  | 'field_tracking'
+  | 'announcement';
+
+export interface CommunicationNotification {
+  id: string;
+  recipientUserId: string; // 'all' | 'role:sales' | 'role:delivery' | 'role:admin' | specific user UID
+  recipientRole: 'all' | 'sales' | 'delivery' | 'admin' | 'individual' | string;
+  recipientUserName?: string;
+  senderUserId: string;
+  senderName: string;
+  senderRole?: UserRole | string;
+  type: CommunicationNotificationType;
+  title: string;
+  body: string;
+  priority: 'normal' | 'important' | 'urgent';
+  actionType: CommunicationActionType;
+  actionTarget?: string;
+  relatedId?: string | null;
+  isRead: boolean;
+  createdAt: string;
+  readAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export interface NotificationPreferences {
+  announcements: boolean;
+  importantUpdates: boolean;
+  deliveryUpdates: boolean;
+  paymentUpdates: boolean;
+  fieldSalesUpdates: boolean;
+  systemNotifications: boolean;
+  soundEnabled: boolean;
+  vibrationEnabled: boolean;
+}
+
 export interface StaffPushToken {
   id: string;
   tokenId?: string;
@@ -987,6 +1066,200 @@ export interface StaffNotification {
   deviceCount?: number;
 }
 
+// ============================================================================
+// STEP 15 - PHASE 2: PRIVATE REAL-TIME TEXT MESSAGING SYSTEM TYPES
+// ============================================================================
 
+export type CommunicationMessageStatus = 'sent' | 'delivered' | 'seen';
 
+export interface ParticipantTypingState {
+  isTyping: boolean;
+  updatedAt: string;
+  userName?: string;
+}
+
+export interface CommunicationConversation {
+  id: string; // Deterministic ID: sort([uid1, uid2]).join('_')
+  participantIds: string[];
+  participantNames: Record<string, string>;
+  participantRoles: Record<string, string>;
+  lastMessage: string;
+  lastMessageSenderId: string;
+  lastMessageAt: string; // ISO timestamp
+  unreadCounts: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+  typing?: Record<string, ParticipantTypingState>;
+}
+
+export interface CommunicationMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string; // 'admin' | 'sales' | 'delivery'
+  receiverId: string;
+  text: string;
+  status: CommunicationMessageStatus;
+  sentAt: string; // ISO timestamp
+  deliveredAt?: string | null;
+  seenAt?: string | null;
+  isDeleted?: boolean;
+}
+
+// ============================================================================
+// STEP 15 - PHASE 3: PREMIUM REAL-TIME VOICE CALLING SYSTEM TYPES
+// ============================================================================
+
+export type VoiceCallStatus =
+  | 'calling'
+  | 'ringing'
+  | 'connecting'
+  | 'connected'
+  | 'rejected'
+  | 'missed'
+  | 'cancelled'
+  | 'ended'
+  | 'failed';
+
+export type VoiceCallDirection = 'incoming' | 'outgoing';
+
+export type VoiceCallConnectionState =
+  | 'excellent'
+  | 'good'
+  | 'poor'
+  | 'reconnecting'
+  | 'failed'
+  | 'disconnected';
+
+export type VoiceCallSignalType = 'offer' | 'answer' | 'ice-candidate' | 'hangup';
+
+export interface VoiceCallSignalCandidate {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
+
+export interface VoiceCallSignal {
+  id: string;
+  callId: string;
+  senderId: string;
+  receiverId?: string;
+  type: VoiceCallSignalType;
+  sdp?: string;
+  candidate?: VoiceCallSignalCandidate;
+  createdAt: string;
+}
+
+export interface VoiceCall {
+  id: string;
+  callerId: string;
+  callerName: string;
+  callerRole: 'admin' | 'sales' | 'delivery' | string;
+  callerAvatar?: string;
+  callerPhone?: string;
+
+  receiverId: string;
+  receiverName: string;
+  receiverRole: 'admin' | 'sales' | 'delivery' | string;
+  receiverAvatar?: string;
+  receiverPhone?: string;
+
+  conversationId?: string;
+
+  callType: 'voice';
+
+  status: VoiceCallStatus;
+
+  startedAt: string; // ISO timestamp
+  answeredAt?: string | null;
+  endedAt?: string | null;
+
+  durationSeconds?: number;
+  endReason?: string;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VoiceCallKPIs {
+  totalCalls: number;
+  connectedCalls: number;
+  missedCalls: number;
+  rejectedCalls: number;
+  totalTalkTimeSeconds: number;
+}
+
+// ============================================================================
+// STEP 15 - PHASE 4: ADVANCED VOICE CALL MANAGEMENT & GROUP COMMUNICATION
+// ============================================================================
+
+export type GroupCallStatus = 'initializing' | 'active' | 'ended';
+export type GroupCallParticipantStatus = 'invited' | 'ringing' | 'connected' | 'rejected' | 'missed' | 'left' | 'failed';
+
+export interface GroupCallParticipant {
+  uid: string;
+  name: string;
+  role: string;
+  status: GroupCallParticipantStatus;
+  joinedAt?: string;
+  leftAt?: string;
+  isMuted?: boolean;
+}
+
+export interface GroupCall {
+  id: string;
+  initiatorId: string;
+  initiatorName: string;
+  initiatorRole: string;
+  
+  type: 'group' | 'broadcast';
+  status: GroupCallStatus;
+  
+  participantIds: string[];
+  participants: Record<string, GroupCallParticipant>; // Keyed by uid
+  
+  startedAt: string;
+  endedAt?: string | null;
+  durationSeconds?: number;
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AnnouncementPriority = 'normal' | 'important' | 'urgent';
+export type AnnouncementAudience = 'all_staff' | 'all_sellers' | 'all_delivery' | 'selected';
+
+export interface Announcement {
+  id: string;
+  senderId: string;
+  senderName: string;
+  
+  message: string;
+  priority: AnnouncementPriority;
+  audience: AnnouncementAudience;
+  selectedUserIds?: string[];
+  
+  recipientCount: number;
+  deliveredCount: number;
+  readCount: number;
+  
+  sentAt: string;
+}
+
+export interface CallQueueEntry {
+  id: string;
+  callerId: string;
+  callerName: string;
+  
+  targetId: string;
+  targetName: string;
+  targetRole: string;
+  
+  status: 'queued' | 'calling' | 'completed' | 'cancelled';
+  
+  queuedAt: string;
+  calledAt?: string;
+}
 

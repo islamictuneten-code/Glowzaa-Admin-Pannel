@@ -13,6 +13,8 @@ import { AccessDenied } from './components/auth/AccessDenied';
 import { LocationGateProvider, useLocationGate } from './context/LocationGateContext';
 import { LocationGateScreen } from './components/sales/LocationGateScreen';
 import { LocationLostModal } from './components/sales/LocationLostModal';
+import { NotificationProvider } from './context/NotificationContext';
+import { NotificationToast } from './components/notifications/NotificationToast';
 
 // Admin Components
 import { AdminOverview } from './components/admin/AdminOverview';
@@ -36,6 +38,10 @@ import { AdminSettings } from './components/admin/AdminSettings';
 import { AdminWarehouses } from './components/admin/AdminWarehouses';
 import { AdminPayroll } from './components/admin/AdminPayroll';
 import { AdminStaffNotification } from './components/admin/AdminStaffNotification';
+import { AdminMessagesView } from './components/admin/AdminMessagesView';
+import { StaffChatInterface } from './components/communication/StaffChatInterface';
+import { VoiceCallGate } from './components/communication/VoiceCallGate';
+import { GroupCallGate } from './components/communication/GroupCallGate';
 import { MySalaryView } from './components/shared/MySalaryView';
 import { requestNotificationPermissionAndRegisterToken } from './services/notificationService';
 
@@ -79,6 +85,8 @@ const DashboardContent: React.FC = () => {
       switch (adminTab) {
         case 'dashboard':
           return <AdminOverview />;
+        case 'messages':
+          return <AdminMessagesView />;
         case 'field_tracking':
           return <AdminFieldTrackingView />;
         case 'notifications':
@@ -131,6 +139,8 @@ const DashboardContent: React.FC = () => {
       switch (salesTab) {
         case 'dashboard':
           return <SalesOverview />;
+        case 'messages':
+          return <StaffChatInterface />;
         case 'create_order':
           return <SalesNewOrder />;
         case 'customers':
@@ -159,6 +169,8 @@ const DashboardContent: React.FC = () => {
       switch (deliveryTab) {
         case 'dashboard':
           return <DeliveryOverview />;
+        case 'messages':
+          return <StaffChatInterface />;
         case 'assigned_orders':
           return <DeliveryAssignedOrders />;
         case 'today_deliveries':
@@ -198,17 +210,6 @@ const MainAppContent: React.FC = () => {
   const { readiness } = useLocationGate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Auto-register FCM push token when user is logged in
-  React.useEffect(() => {
-    if (currentUser) {
-      requestNotificationPermissionAndRegisterToken(currentUser).catch((err) => {
-        console.warn('Auto FCM push token register notice:', err);
-      });
-    }
-  }, [currentUser?.uid]);
-
-  // Allow sales users to enter dashboard normally without blocking full-screen gate
-
   return (
     <div className="min-h-screen bg-[#F5F8FA] text-[#102A2A] flex flex-col font-sans antialiased selection:bg-[#087F7A] selection:text-white">
       {/* Top Header */}
@@ -235,6 +236,13 @@ const MainAppContent: React.FC = () => {
 
       {/* Real-time Location Lost Modal Overlay */}
       {currentUser?.role === 'sales' && <LocationLostModal />}
+
+      {/* Foreground Notification Toast Layer */}
+      <NotificationToast />
+
+      {/* Voice Call Layer */}
+      <VoiceCallGate />
+      <GroupCallGate />
 
       {/* Global Modal & Notification Layers */}
       <InvoiceModal />
@@ -271,9 +279,11 @@ const AuthenticatedApp: React.FC = () => {
 
   return (
     <AppProvider>
-      <LocationGateProvider>
-        <MainAppContent />
-      </LocationGateProvider>
+      <NotificationProvider>
+        <LocationGateProvider>
+          <MainAppContent />
+        </LocationGateProvider>
+      </NotificationProvider>
     </AppProvider>
   );
 };

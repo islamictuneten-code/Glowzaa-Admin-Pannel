@@ -511,6 +511,210 @@
         "isRead": { "type": "boolean", "description": "Read status flag" }
       },
       "required": ["id", "notificationId", "recipientUserId", "senderUserId", "senderUserName", "title", "message", "type", "priority", "createdAt", "status", "isRead"]
+    },
+    "CommunicationDevice": {
+      "title": "CommunicationDevice",
+      "description": "Registered staff device and FCM token metadata for Push notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Device document ID" },
+        "userId": { "type": "string", "description": "Staff User Firebase Auth UID" },
+        "role": { "type": "string", "description": "Staff role: admin, sales, delivery" },
+        "userName": { "type": "string", "description": "Staff user full name" },
+        "platform": { "type": "string", "description": "Device platform e.g. Android, Windows, macOS, iOS" },
+        "browser": { "type": "string", "description": "Browser e.g. Chrome, Edge, Safari" },
+        "deviceLabel": { "type": "string", "description": "Human friendly device label" },
+        "fcmToken": { "type": "string", "description": "Firebase Cloud Messaging device token" },
+        "permissionStatus": { "type": "string", "description": "Permission status", "enum": ["granted", "denied", "default", "prompt"] },
+        "isActive": { "type": "boolean", "description": "Active registration flag" },
+        "lastSeenAt": { "type": "string", "description": "Last seen timestamp" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["id", "userId", "role", "userName", "platform", "browser", "fcmToken", "permissionStatus", "isActive", "createdAt", "updatedAt"]
+    },
+    "CommunicationNotification": {
+      "title": "CommunicationNotification",
+      "description": "Staff push notification and communication center message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Notification document ID" },
+        "recipientUserId": { "type": "string", "description": "Recipient UID, 'all', or 'role:sales', 'role:delivery', 'role:admin'" },
+        "recipientRole": { "type": "string", "description": "Recipient role category" },
+        "recipientUserName": { "type": "string", "description": "Recipient user name" },
+        "senderUserId": { "type": "string", "description": "Sender User UID" },
+        "senderName": { "type": "string", "description": "Sender user full name" },
+        "senderRole": { "type": "string", "description": "Sender role" },
+        "type": { "type": "string", "description": "Notification category", "enum": ["message", "announcement", "urgent", "order", "delivery", "payment", "field", "system"] },
+        "title": { "type": "string", "description": "Notification headline" },
+        "body": { "type": "string", "description": "Notification message body" },
+        "priority": { "type": "string", "description": "Priority", "enum": ["normal", "important", "urgent"] },
+        "actionType": { "type": "string", "description": "Action routing category", "enum": ["none", "communication", "order", "delivery", "payment", "field_tracking", "announcement"] },
+        "actionTarget": { "type": "string", "description": "Action target ID or destination route" },
+        "relatedId": { "type": "string", "description": "Associated record ID" },
+        "isRead": { "type": "boolean", "description": "Read status flag" },
+        "createdAt": { "type": "string", "description": "Created ISO timestamp" },
+        "readAt": { "type": "string", "description": "Read at ISO timestamp" },
+        "expiresAt": { "type": "string", "description": "Optional expiry ISO timestamp" }
+      },
+      "required": ["id", "recipientUserId", "recipientRole", "senderUserId", "senderName", "type", "title", "body", "priority", "actionType", "isRead", "createdAt"]
+    },
+    "CommunicationConversation": {
+      "title": "CommunicationConversation",
+      "description": "Private 1-on-1 communication conversation between Admin and Staff member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Deterministic conversation ID (uid1_uid2)" },
+        "participantIds": {
+          "type": "array",
+          "description": "Array of participant UIDs",
+          "items": { "type": "string" }
+        },
+        "participantNames": {
+          "type": "object",
+          "description": "Map of participant UID to user full name"
+        },
+        "participantRoles": {
+          "type": "object",
+          "description": "Map of participant UID to role (admin, sales, delivery)"
+        },
+        "lastMessage": { "type": "string", "description": "Preview text of the latest message" },
+        "lastMessageSenderId": { "type": "string", "description": "UID of sender of latest message" },
+        "lastMessageAt": { "type": "string", "description": "ISO timestamp of latest message" },
+        "unreadCounts": {
+          "type": "object",
+          "description": "Map of participant UID to unread message count"
+        },
+        "createdAt": { "type": "string", "description": "Conversation created ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Conversation last updated ISO timestamp" },
+        "typing": {
+          "type": "object",
+          "description": "Map of participant UID to typing state"
+        }
+      },
+      "required": ["id", "participantIds", "participantNames", "participantRoles", "lastMessage", "lastMessageSenderId", "lastMessageAt", "unreadCounts", "createdAt", "updatedAt"]
+    },
+    "CommunicationMessage": {
+      "title": "CommunicationMessage",
+      "description": "Real-time private communication message between Admin and Staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message document ID" },
+        "conversationId": { "type": "string", "description": "Associated conversation ID" },
+        "senderId": { "type": "string", "description": "Sender user UID" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "senderRole": { "type": "string", "description": "Sender role: admin, sales, delivery" },
+        "receiverId": { "type": "string", "description": "Receiver user UID" },
+        "text": { "type": "string", "description": "Message text content" },
+        "status": { "type": "string", "description": "Message delivery status", "enum": ["sent", "delivered", "seen"] },
+        "sentAt": { "type": "string", "description": "Sent ISO timestamp" },
+        "deliveredAt": { "type": "string", "description": "Delivered ISO timestamp" },
+        "seenAt": { "type": "string", "description": "Seen ISO timestamp" },
+        "isDeleted": { "type": "boolean", "description": "Soft delete status flag" }
+      },
+      "required": ["id", "conversationId", "senderId", "senderName", "senderRole", "receiverId", "text", "status", "sentAt"]
+    },
+    "VoiceCall": {
+      "title": "VoiceCall",
+      "description": "Real-time private voice call session between Admin and Staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Call unique session identifier" },
+        "callerId": { "type": "string", "description": "Caller user UID" },
+        "callerName": { "type": "string", "description": "Caller display name" },
+        "callerRole": { "type": "string", "description": "Caller role: admin, sales, delivery" },
+        "callerAvatar": { "type": "string", "description": "Caller avatar URL or initials" },
+        "callerPhone": { "type": "string", "description": "Caller phone number" },
+        "receiverId": { "type": "string", "description": "Receiver user UID" },
+        "receiverName": { "type": "string", "description": "Receiver display name" },
+        "receiverRole": { "type": "string", "description": "Receiver role: admin, sales, delivery" },
+        "receiverAvatar": { "type": "string", "description": "Receiver avatar URL or initials" },
+        "receiverPhone": { "type": "string", "description": "Receiver phone number" },
+        "conversationId": { "type": "string", "description": "Associated conversation reference" },
+        "callType": { "type": "string", "description": "Call type: voice", "enum": ["voice"] },
+        "status": { "type": "string", "description": "Call session status", "enum": ["calling", "ringing", "connecting", "connected", "rejected", "missed", "cancelled", "ended", "failed"] },
+        "startedAt": { "type": "string", "description": "Call start ISO timestamp" },
+        "answeredAt": { "type": "string", "description": "Call answered ISO timestamp" },
+        "endedAt": { "type": "string", "description": "Call ended ISO timestamp" },
+        "durationSeconds": { "type": "number", "description": "Call active connected duration in seconds" },
+        "endReason": { "type": "string", "description": "Termination reason" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated ISO timestamp" }
+      },
+      "required": ["id", "callerId", "callerName", "callerRole", "receiverId", "receiverName", "receiverRole", "callType", "status", "startedAt", "createdAt", "updatedAt"]
+    },
+    "VoiceCallSignal": {
+      "title": "VoiceCallSignal",
+      "description": "WebRTC SDP and ICE signaling exchange payload for voice call",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Signal document ID" },
+        "callId": { "type": "string", "description": "Associated call ID" },
+        "senderId": { "type": "string", "description": "Sender UID of the WebRTC signal" },
+        "receiverId": { "type": "string", "description": "Recipient UID" },
+        "type": { "type": "string", "description": "Signal type", "enum": ["offer", "answer", "ice-candidate", "hangup"] },
+        "sdp": { "type": "string", "description": "Serialized SDP description" },
+        "candidate": { "type": "object", "description": "Serialized ICE candidate" },
+        "createdAt": { "type": "string", "description": "Signal dispatch ISO timestamp" }
+      },
+      "required": ["id", "callId", "senderId", "type", "createdAt"]
+    },
+    "GroupCall": {
+      "title": "GroupCall",
+      "description": "Group voice call or broadcast session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "initiatorId": { "type": "string" },
+        "initiatorName": { "type": "string" },
+        "initiatorRole": { "type": "string" },
+        "type": { "type": "string", "enum": ["group", "broadcast"] },
+        "status": { "type": "string", "enum": ["initializing", "active", "ended"] },
+        "participantIds": { "type": "array", "items": { "type": "string" } },
+        "participants": { "type": "object" },
+        "startedAt": { "type": "string" },
+        "endedAt": { "type": "string" },
+        "durationSeconds": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "initiatorId", "type", "status", "participantIds", "createdAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Group text announcement",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "message": { "type": "string" },
+        "priority": { "type": "string", "enum": ["normal", "important", "urgent"] },
+        "audience": { "type": "string", "enum": ["all_staff", "all_sellers", "all_delivery", "selected"] },
+        "selectedUserIds": { "type": "array", "items": { "type": "string" } },
+        "recipientCount": { "type": "number" },
+        "deliveredCount": { "type": "number" },
+        "readCount": { "type": "number" },
+        "sentAt": { "type": "string" }
+      },
+      "required": ["id", "senderId", "message", "priority", "audience", "sentAt"]
+    },
+    "CallQueueEntry": {
+      "title": "CallQueueEntry",
+      "description": "Queue for calling busy users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "callerId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" },
+        "targetRole": { "type": "string" },
+        "status": { "type": "string", "enum": ["queued", "calling", "completed", "cancelled"] },
+        "queuedAt": { "type": "string" },
+        "calledAt": { "type": "string" }
+      },
+      "required": ["id", "callerId", "targetId", "status", "queuedAt"]
     }
   },
   "firestore": {
@@ -581,6 +785,22 @@
     "/staff_notifications/{notificationId}": {
       "schema": "StaffNotification",
       "description": "Staff push notifications and direct message records"
+    },
+    "/communication_devices/{deviceId}": {
+      "schema": "CommunicationDevice",
+      "description": "Registered staff device registry and FCM token metadata"
+    },
+    "/communication_notifications/{notificationId}": {
+      "schema": "CommunicationNotification",
+      "description": "Communication center push notifications and announcements"
+    },
+    "/communication_conversations/{conversationId}": {
+      "schema": "CommunicationConversation",
+      "description": "Private real-time conversation between Admin and Staff member"
+    },
+    "/communication_messages/{messageId}": {
+      "schema": "CommunicationMessage",
+      "description": "Private real-time chat messages between Admin and Staff member"
     }
   }
 }

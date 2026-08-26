@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
 import { NotificationCenter } from '../shared/NotificationCenter';
+import { HeaderMessageButton } from '../communication/HeaderMessageButton';
 import { ShieldCheck, TrendingUp, Truck, Search, Bell, Menu, X, PlusCircle, Building2, ChevronDown, Package, Banknote, LogOut, User, Check } from 'lucide-react';
 import { FieldDutyToggle } from '../sales/FieldDutyToggle';
 
@@ -196,6 +197,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
               <span>Collect Due</span>
             </button>
           )}
+
+          {/* Real-time Private Staff Messaging Quick Access */}
+          <HeaderMessageButton />
 
           {/* Real-time Firebase Push Notification Center */}
           <NotificationCenter />

@@ -3,7 +3,7 @@ import { AuthUser } from '../../types';
 import { fetchStaffUsersFromFirestore } from '../../services/staffAuthService';
 import { AdminCommunicationCenter } from './AdminCommunicationCenter';
 
-export const AdminStaffNotification: React.FC = () => {
+export const AdminMessagesView: React.FC = () => {
   const [staffList, setStaffList] = useState<AuthUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -17,7 +17,7 @@ export const AdminStaffNotification: React.FC = () => {
           setStaffList(staff);
         }
       } catch (err) {
-        console.warn('Load staff users notice:', err);
+        console.warn('Load staff users notice in AdminMessagesView:', err);
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -26,5 +26,5 @@ export const AdminStaffNotification: React.FC = () => {
     return () => { isMounted = false; };
   }, []);
 
-  return <AdminCommunicationCenter staffUsers={staffList} />;
+  return <AdminCommunicationCenter staffUsers={staffList} defaultTab="messages" />;
 };

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { AdminTab, DeliveryTab, SalesTab } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
+import { subscribeToCommunicationConversations } from '../../services/communicationService';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -31,7 +32,8 @@ import {
   ShieldCheck,
   Building2,
   MapPin,
-  BellRing
+  BellRing,
+  MessageSquare
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -59,6 +61,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
   } = useApp();
 
   const { currentUser, logout } = useAuth();
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+
+  const currentUserId = currentUser?.uid || (currentUser as any)?.id || '';
+
+  // Subscribe to real-time conversation unread counts for navigation badges
+  useEffect(() => {
+    if (!currentUserId) return;
+    const unsub = subscribeToCommunicationConversations(currentUserId, role || 'staff', (convs) => {
+      const count = convs.reduce((sum, c) => sum + (c.unreadCounts?.[currentUserId] || 0), 0);
+      setUnreadMessagesCount(count);
+    });
+    return () => unsub();
+  }, [currentUserId, role]);
 
   // Badges calculation
   const pendingExpensesCount = (expenses || []).filter(e => e && !e.deleted && e.status === 'pending').length;
@@ -78,6 +93,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const adminNavItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { 
+      id: 'messages', 
+      label: 'Staff Messages', 
+      icon: <MessageSquare className="w-4 h-4 text-[#087F7A]" />, 
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined, 
+      badgeColor: 'bg-[#087F7A] text-white animate-pulse' 
+    },
     { id: 'notifications', label: 'Push Notifications', icon: <BellRing className="w-4 h-4 text-rose-600" /> },
     { id: 'field_tracking', label: 'Field Sales Tracking', icon: <MapPin className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'products', label: 'Products', icon: <Package className="w-4 h-4" /> },
@@ -104,6 +126,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const salesNavItems: { id: SalesTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { 
+      id: 'messages', 
+      label: 'HQ Direct Chat', 
+      icon: <MessageSquare className="w-4 h-4 text-[#087F7A]" />, 
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined, 
+      badgeColor: 'bg-[#087F7A] text-white animate-pulse' 
+    },
     { id: 'customers', label: 'Customers', icon: <Users className="w-4 h-4" /> },
     { id: 'products', label: 'Product Catalog', icon: <Package className="w-4 h-4" /> },
     { id: 'create_order', label: 'Create New Order', icon: <PlusCircle className="w-4 h-4 text-[#087F7A]" /> },
@@ -118,6 +147,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const deliveryNavItems: { id: DeliveryTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { 
+      id: 'messages', 
+      label: 'HQ Direct Chat', 
+      icon: <MessageSquare className="w-4 h-4 text-[#087F7A]" />, 
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined, 
+      badgeColor: 'bg-[#087F7A] text-white animate-pulse' 
+    },
     { id: 'assigned_orders', label: 'Assigned Orders', icon: <ShoppingCart className="w-4 h-4" /> },
     { id: 'today_deliveries', label: "Today's Deliveries", icon: <Truck className="w-4 h-4" />, badge: myPendingDeliveries > 0 ? myPendingDeliveries : undefined, badgeColor: 'bg-teal-100 text-teal-800' },
     { id: 'pending_deliveries', label: 'Pending Deliveries', icon: <Clock className="w-4 h-4" /> },

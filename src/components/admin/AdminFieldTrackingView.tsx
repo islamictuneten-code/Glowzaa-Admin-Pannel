@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { FieldDutySession, AuthUser } from '../../types';
 import { subscribeToAllFieldDutySessions } from '../../services/firestoreService';
 import { fetchStaffUsers } from '../../services/staffAuthService';
+import { evaluateGpsFreshness, evaluateTrackingStatus } from '../../services/locationService';
 import { AdminFieldTrackingMap } from './field-tracking/AdminFieldTrackingMap';
 import { StaffFieldDetailModal } from './field-tracking/StaffFieldDetailModal';
 import { StaffRouteHistoryModal } from './field-tracking/StaffRouteHistoryModal';
@@ -51,7 +52,7 @@ export const AdminFieldTrackingView: React.FC = () => {
 
   // Filter & Search State
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'stale' | 'offline' | 'ended'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'on_field' | 'live' | 'delayed' | 'stale' | 'off_duty'>('all');
   const [territoryFilter, setTerritoryFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'last7' | 'custom'>('today');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -127,37 +128,6 @@ export const AdminFieldTrackingView: React.FC = () => {
     }
   };
 
-  // Threshold constants for Live / Stale / Offline status
-  const LIVE_THRESHOLD_MS = 6 * 60 * 1000; // 6 minutes
-  const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
-
-  // Helper to calculate stale status
-  const getStaleInfo = (session: FieldDutySession | undefined) => {
-    if (!session || session.status !== 'active') {
-      return { status: 'offline' as const, minutesAgo: 999, label: 'Off Duty' };
-    }
-    if (!session.lastLocationUpdateAt || session.lastLatitude === null || session.lastLatitude === undefined) {
-      return { status: 'offline' as const, minutesAgo: 999, label: 'GPS Error / No Ping' };
-    }
-
-    const updateMs = new Date(session.lastLocationUpdateAt).getTime();
-    const nowMs = Date.now();
-    if (isNaN(updateMs)) {
-      return { status: 'offline' as const, minutesAgo: 999, label: 'GPS Error' };
-    }
-
-    const diffMs = nowMs - updateMs;
-    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
-
-    if (diffMs <= LIVE_THRESHOLD_MS) {
-      return { status: 'live' as const, minutesAgo: diffMinutes, label: 'LIVE' };
-    } else if (diffMs <= STALE_THRESHOLD_MS) {
-      return { status: 'stale' as const, minutesAgo: diffMinutes, label: 'GPS STALE' };
-    } else {
-      return { status: 'offline' as const, minutesAgo: diffMinutes, label: 'DISCONNECTED' };
-    }
-  };
-
   // Merge registered sales staff with their latest field duty session
   const staffFieldItems = useMemo(() => {
     // Map latest session for each userId
@@ -177,15 +147,21 @@ export const AdminFieldTrackingView: React.FC = () => {
 
     // Merge with registered sales staff
     const items = salesStaffList.map((user) => {
-      const session = latestSessionByUser.get(user.uid);
-      const staleInfo = getStaleInfo(session);
+      const session = latestSessionByUser.get(user.uid) || null;
+      const trackingEval = evaluateTrackingStatus(session);
+      const gpsEval = evaluateGpsFreshness(session?.lastLocationUpdateAt);
 
       return {
         user,
-        session: session || null,
-        staleStatus: staleInfo.status,
-        minutesAgo: staleInfo.minutesAgo,
-        staleLabel: staleInfo.label
+        session,
+        isOnField: trackingEval.isOnField,
+        dutyLabel: trackingEval.label,
+        dutyBadgeBg: trackingEval.badgeBg,
+        gpsFreshness: gpsEval.freshness,
+        minutesAgo: gpsEval.minutesAgo,
+        gpsLabel: gpsEval.label,
+        gpsBadgeBg: gpsEval.badgeBg,
+        gpsDotColor: gpsEval.dotColor
       };
     });
 
@@ -203,13 +179,19 @@ export const AdminFieldTrackingView: React.FC = () => {
           status: 'active',
           createdAt: s.startedAt
         };
-        const staleInfo = getStaleInfo(s);
+        const trackingEval = evaluateTrackingStatus(s);
+        const gpsEval = evaluateGpsFreshness(s.lastLocationUpdateAt);
         items.push({
           user: dummyUser,
           session: s,
-          staleStatus: staleInfo.status,
-          minutesAgo: staleInfo.minutesAgo,
-          staleLabel: staleInfo.label
+          isOnField: trackingEval.isOnField,
+          dutyLabel: trackingEval.label,
+          dutyBadgeBg: trackingEval.badgeBg,
+          gpsFreshness: gpsEval.freshness,
+          minutesAgo: gpsEval.minutesAgo,
+          gpsLabel: gpsEval.label,
+          gpsBadgeBg: gpsEval.badgeBg,
+          gpsDotColor: gpsEval.dotColor
         });
       }
     });
@@ -244,15 +226,17 @@ export const AdminFieldTrackingView: React.FC = () => {
         }
       }
 
-      // 2. Status filter
-      if (statusFilter === 'active') {
-        if (!item.session || item.session.status !== 'active') return false;
+      // 2. Status filter (Decoupled Phase 4 State Filter)
+      if (statusFilter === 'on_field') {
+        if (!item.isOnField) return false;
+      } else if (statusFilter === 'live') {
+        if (!item.isOnField || item.gpsFreshness !== 'live') return false;
+      } else if (statusFilter === 'delayed') {
+        if (!item.isOnField || item.gpsFreshness !== 'delayed') return false;
       } else if (statusFilter === 'stale') {
-        if (!item.session || item.session.status !== 'active' || item.staleStatus !== 'stale') return false;
-      } else if (statusFilter === 'offline') {
-        if (!item.session || item.session.status !== 'active' || item.staleStatus !== 'offline') return false;
-      } else if (statusFilter === 'ended') {
-        if (item.session && item.session.status === 'active') return false;
+        if (!item.isOnField || item.gpsFreshness !== 'stale') return false;
+      } else if (statusFilter === 'off_duty') {
+        if (item.isOnField) return false;
       }
 
       // 3. Territory filter
@@ -276,7 +260,7 @@ export const AdminFieldTrackingView: React.FC = () => {
       )
       .map((item) => ({
         session: item.session!,
-        staleStatus: item.staleStatus,
+        staleStatus: item.gpsFreshness,
         minutesAgo: item.minutesAgo
       }));
   }, [filteredStaffItems]);
@@ -284,9 +268,23 @@ export const AdminFieldTrackingView: React.FC = () => {
   // Summary Metrics calculations
   const summaryMetrics = useMemo(() => {
     const activeSessions = sessions.filter((s) => s.status === 'active');
+    
+    // Live GPS: <= 5 minutes
     const liveGpsCount = activeSessions.filter((s) => {
-      const updateMs = s.lastLocationUpdateAt ? new Date(s.lastLocationUpdateAt).getTime() : 0;
-      return Date.now() - updateMs <= 10 * 60 * 1000;
+      const evalResult = evaluateGpsFreshness(s.lastLocationUpdateAt);
+      return evalResult.freshness === 'live';
+    }).length;
+
+    // Delayed GPS: 5 - 10 minutes
+    const delayedGpsCount = activeSessions.filter((s) => {
+      const evalResult = evaluateGpsFreshness(s.lastLocationUpdateAt);
+      return evalResult.freshness === 'delayed';
+    }).length;
+
+    // Stale GPS: > 10 minutes
+    const staleGpsCount = activeSessions.filter((s) => {
+      const evalResult = evaluateGpsFreshness(s.lastLocationUpdateAt);
+      return evalResult.freshness === 'stale';
     }).length;
 
     const totalVisits = activeSessions.reduce((sum, s) => sum + (s.totalVisitsCompleted || 0), 0);
@@ -299,6 +297,8 @@ export const AdminFieldTrackingView: React.FC = () => {
       activeStaffCount: activeSessions.length,
       totalSalesStaff: salesStaffList.length || staffFieldItems.length,
       liveGpsCount,
+      delayedGpsCount,
+      staleGpsCount,
       totalVisits,
       totalOrders,
       totalOrdersValue,
@@ -355,7 +355,7 @@ export const AdminFieldTrackingView: React.FC = () => {
               <h1 className="page-title">Field Sales Tracking</h1>
               <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live Firestore Sync
+                Live Telemetry Active
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -398,14 +398,14 @@ export const AdminFieldTrackingView: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[10px] font-extrabold uppercase text-slate-400 block tracking-wider">
-            Active Staff
+            On Field Active
           </span>
           <div className="text-xl font-extrabold text-[#087F7A] mt-0.5">
             {summaryMetrics.activeStaffCount}
           </div>
           <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            On Field Duty
+            Active Duty
           </span>
         </div>
 
@@ -428,8 +428,20 @@ export const AdminFieldTrackingView: React.FC = () => {
           <div className="text-xl font-extrabold text-emerald-600 mt-0.5">
             {summaryMetrics.liveGpsCount}
           </div>
-          <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">
-            &lt; 10m update
+          <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block">
+            0–3m fresh
+          </span>
+        </div>
+
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-[10px] font-extrabold uppercase text-slate-400 block tracking-wider">
+            Delayed/Stale
+          </span>
+          <div className="text-xl font-extrabold text-amber-600 mt-0.5">
+            {summaryMetrics.delayedGpsCount + summaryMetrics.staleGpsCount}
+          </div>
+          <span className="text-[10px] text-amber-600 font-semibold mt-0.5 block">
+            3–15m ping
           </span>
         </div>
 
@@ -471,18 +483,6 @@ export const AdminFieldTrackingView: React.FC = () => {
 
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[10px] font-extrabold uppercase text-slate-400 block tracking-wider">
-            Collection
-          </span>
-          <div className="text-base font-extrabold text-emerald-700 mt-1 truncate" title={formatBDT(summaryMetrics.totalCollections)}>
-            {formatBDT(summaryMetrics.totalCollections)}
-          </div>
-          <span className="text-[10px] text-emerald-600 font-semibold block">
-            Cash & Due
-          </span>
-        </div>
-
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold uppercase text-slate-400 block tracking-wider">
             Distance
           </span>
           <div className="text-xl font-extrabold text-teal-700 mt-0.5">
@@ -494,7 +494,7 @@ export const AdminFieldTrackingView: React.FC = () => {
         </div>
       </div>
 
-      {/* Debug Status Panel (Requirement 22) */}
+      {/* Diagnostics Panel */}
       <div className="bg-slate-900 text-slate-100 rounded-xl p-3 shadow-md text-xs font-mono space-y-2">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
           <div className="flex items-center gap-2 text-teal-400 font-bold">
@@ -510,19 +510,19 @@ export const AdminFieldTrackingView: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div>
-            <span className="text-slate-400 block text-[10px]">Active Sessions:</span>
+            <span className="text-slate-400 block text-[10px]">On Field (Active):</span>
             <span className="text-emerald-400 font-bold">{summaryMetrics.activeStaffCount}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[10px]">Loaded Sessions:</span>
-            <span className="text-white font-bold">{sessions.length}</span>
+            <span className="text-slate-400 block text-[10px]">Live GPS (&le; 5m):</span>
+            <span className="text-emerald-400 font-bold">{summaryMetrics.liveGpsCount}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[10px]">Admin Listener:</span>
-            <span className="text-emerald-400 font-bold">CONNECTED (onSnapshot)</span>
+            <span className="text-slate-400 block text-[10px]">Delayed / Stale GPS:</span>
+            <span className="text-amber-400 font-bold">{summaryMetrics.delayedGpsCount + summaryMetrics.staleGpsCount}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[10px]">Last Sync:</span>
+            <span className="text-slate-400 block text-[10px]">Last Firestore Sync:</span>
             <span className="text-slate-200">{lastSyncTime.toLocaleTimeString()}</span>
           </div>
         </div>
@@ -531,8 +531,8 @@ export const AdminFieldTrackingView: React.FC = () => {
             {staffFieldItems.map((item, idx) => (
               <div key={idx} className="flex flex-wrap items-center justify-between bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
                 <span className="text-teal-300 font-bold">{item.user.name} ({item.user.loginId || item.user.staffId || 'Sales'})</span>
-                <span className="text-slate-300">Duty: <b className={item.session?.status === 'active' ? 'text-emerald-400' : 'text-slate-400'}>{item.session?.status?.toUpperCase() || 'OFF'}</b></span>
-                <span className="text-slate-300">GPS Status: <b className="text-amber-300">{item.staleLabel} ({item.minutesAgo}m ago)</b></span>
+                <span className="text-slate-300">Duty: <b className={item.isOnField ? 'text-emerald-400' : 'text-slate-400'}>{item.dutyLabel}</b></span>
+                <span className="text-slate-300">GPS Status: <b className={item.gpsFreshness === 'live' ? 'text-emerald-400' : item.gpsFreshness === 'delayed' ? 'text-amber-400' : 'text-orange-400'}>{item.gpsLabel} ({item.minutesAgo < 900 ? `${item.minutesAgo}m ago` : 'no ping'})</b></span>
                 <span className="text-slate-400 font-mono text-[10px]">Lat/Lon: {item.session?.lastLatitude ? `${item.session.lastLatitude.toFixed(4)}, ${item.session.lastLongitude?.toFixed(4)}` : 'None'}</span>
               </div>
             ))}
@@ -562,11 +562,12 @@ export const AdminFieldTrackingView: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value as any)}
             className="glowzaa-input text-xs w-auto"
           >
-            <option value="all">All Statuses ({staffFieldItems.length})</option>
-            <option value="active">🟢 On Field Active ({summaryMetrics.activeStaffCount})</option>
-            <option value="stale">🟠 Location Stale</option>
-            <option value="offline">🔴 GPS Offline</option>
-            <option value="ended">⚪ Off Duty / Ended</option>
+            <option value="all">All Sales Staff ({staffFieldItems.length})</option>
+            <option value="on_field">🟢 On Field Active ({summaryMetrics.activeStaffCount})</option>
+            <option value="live">🛰️ Live GPS (0–3m) ({summaryMetrics.liveGpsCount})</option>
+            <option value="delayed">🟡 Delayed GPS (3–7m) ({summaryMetrics.delayedGpsCount})</option>
+            <option value="stale">🟠 Stale GPS (7–15m) ({summaryMetrics.staleGpsCount})</option>
+            <option value="off_duty">⚪ Off Duty / Ended</option>
           </select>
 
           {/* Territory Filter */}
@@ -663,25 +664,6 @@ export const AdminFieldTrackingView: React.FC = () => {
             ) : (
               filteredStaffItems.map((item) => {
                 const isSelected = selectedStaffId === item.user.uid;
-                const isOnField = item.session && item.session.status === 'active';
-
-                const statusBg =
-                  item.staleStatus === 'live'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : item.staleStatus === 'stale'
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : isOnField
-                    ? 'bg-rose-50 text-rose-700 border-rose-200'
-                    : 'bg-slate-100 text-slate-600 border-slate-200';
-
-                const statusDot =
-                  item.staleStatus === 'live'
-                    ? 'bg-emerald-500 animate-pulse'
-                    : item.staleStatus === 'stale'
-                    ? 'bg-amber-500'
-                    : isOnField
-                    ? 'bg-rose-500'
-                    : 'bg-slate-400';
 
                 return (
                   <div
@@ -708,12 +690,24 @@ export const AdminFieldTrackingView: React.FC = () => {
                         </div>
                       </div>
 
-                      <span
-                        className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border flex items-center gap-1 shrink-0 ${statusBg}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
-                        {item.staleLabel}
-                      </span>
+                      {/* State Separated Badges */}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {/* 1. Primary Duty Badge */}
+                        <span
+                          className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border flex items-center gap-1 ${item.dutyBadgeBg}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${item.isOnField ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                          {item.dutyLabel}
+                        </span>
+
+                        {/* 2. Secondary GPS Freshness Badge */}
+                        {item.isOnField && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${item.gpsBadgeBg}`}>
+                            <span className={`w-1 h-1 rounded-full ${item.gpsDotColor}`} />
+                            {item.gpsLabel} {item.minutesAgo < 900 && item.minutesAgo > 0 ? `(${item.minutesAgo}m)` : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Progress Mini Grid */}
@@ -746,7 +740,7 @@ export const AdminFieldTrackingView: React.FC = () => {
                       </div>
                     ) : (
                       <div className="mt-2.5 text-[11px] text-slate-400 italic">
-                        No field duty logged today.
+                        Staff member is currently off duty.
                       </div>
                     )}
 
@@ -755,7 +749,10 @@ export const AdminFieldTrackingView: React.FC = () => {
                       <div className="text-[11px] text-slate-500 font-medium">
                         {item.session?.lastLocationUpdateAt ? (
                           <span>
-                            GPS Ping: <b>{item.minutesAgo === 0 ? 'Just now' : `${item.minutesAgo}m ago`}</b>
+                            GPS: <b>{item.minutesAgo === 0 ? 'Just now' : `${item.minutesAgo}m ago`}</b>
+                            {item.session.gpsAccuracyMeters ? (
+                              <span className="ml-1 text-slate-400">(±{Math.round(item.session.gpsAccuracyMeters)}m)</span>
+                            ) : null}
                             {item.session.batteryLevel !== null && item.session.batteryLevel !== undefined ? (
                               <span className="ml-1.5 font-bold">🔋{item.session.batteryLevel}%</span>
                             ) : null}
@@ -814,16 +811,6 @@ export const AdminFieldTrackingView: React.FC = () => {
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredStaffItems.map((item) => {
-            const isOnField = item.session && item.session.status === 'active';
-            const statusBg =
-              item.staleStatus === 'live'
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : item.staleStatus === 'stale'
-                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : isOnField
-                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                : 'bg-slate-100 text-slate-600 border-slate-200';
-
             return (
               <div
                 key={item.user.uid}
@@ -843,11 +830,20 @@ export const AdminFieldTrackingView: React.FC = () => {
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${statusBg}`}
-                    >
-                      {item.staleLabel}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border flex items-center gap-1 ${item.dutyBadgeBg}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${item.isOnField ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                        {item.dutyLabel}
+                      </span>
+                      {item.isOnField && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${item.gpsBadgeBg}`}>
+                          <span className={`w-1 h-1 rounded-full ${item.gpsDotColor}`} />
+                          {item.gpsLabel} {item.minutesAgo < 900 && item.minutesAgo > 0 ? `(${item.minutesAgo}m)` : ''}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {item.session ? (
@@ -919,7 +915,8 @@ export const AdminFieldTrackingView: React.FC = () => {
             <thead>
               <tr>
                 <th>Staff Member</th>
-                <th>Status</th>
+                <th>Duty Status</th>
+                <th>GPS Freshness</th>
                 <th>Duty Started</th>
                 <th>Last GPS Update</th>
                 <th>Accuracy</th>
@@ -933,16 +930,6 @@ export const AdminFieldTrackingView: React.FC = () => {
             </thead>
             <tbody>
               {filteredStaffItems.map((item) => {
-                const isOnField = item.session && item.session.status === 'active';
-                const statusBg =
-                  item.staleStatus === 'live'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : item.staleStatus === 'stale'
-                    ? 'bg-amber-100 text-amber-800'
-                    : isOnField
-                    ? 'bg-rose-100 text-rose-800'
-                    : 'bg-slate-100 text-slate-600';
-
                 return (
                   <tr key={item.user.uid}>
                     <td>
@@ -952,8 +939,14 @@ export const AdminFieldTrackingView: React.FC = () => {
                       </div>
                     </td>
                     <td>
-                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${statusBg}`}>
-                        {item.staleLabel}
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${item.dutyBadgeBg}`}>
+                        {item.dutyLabel}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${item.gpsBadgeBg}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${item.gpsDotColor}`} />
+                        {item.gpsLabel}
                       </span>
                     </td>
                     <td className="text-slate-700">
@@ -1032,8 +1025,8 @@ export const AdminFieldTrackingView: React.FC = () => {
         }}
         session={inspectSession}
         staffUser={inspectUser}
-        staleStatus={getStaleInfo(inspectSession || undefined).status}
-        minutesAgo={getStaleInfo(inspectSession || undefined).minutesAgo}
+        staleStatus={evaluateGpsFreshness(inspectSession?.lastLocationUpdateAt).freshness as any}
+        minutesAgo={evaluateGpsFreshness(inspectSession?.lastLocationUpdateAt).minutesAgo}
         formatBDT={formatBDT}
         onOpenRoute={(session) => {
           setInspectSession(null);
