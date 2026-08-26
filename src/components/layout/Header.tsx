@@ -204,9 +204,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
           {/* Real-time Firebase Push Notification Center */}
           <NotificationCenter />
           
-          {/* Duty Toggle moved here */}
-          {role === 'sales' && <FieldDutyToggle />}
-
           {/* User Persona Profile Pill / Dropdown */}
           <div className="relative">
             <button
@@ -275,6 +272,17 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, isMobileS
                     {currentUser?.title || (currentUser?.role === 'admin' ? 'HQ Administrator' : currentUser?.role === 'sales' ? 'Sales Executive' : 'Delivery Driver')}
                   </div>
                 </div>
+
+                {/* Duty Status Toggle (under Role Title) */}
+                {(currentUser?.role === 'sales' || role === 'sales') && (
+                  <div className="mb-2.5 p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/80 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">Field Duty Status</div>
+                      <div className="text-[10px] text-slate-500 font-medium">Location Tracking</div>
+                    </div>
+                    <FieldDutyToggle showLabel={false} />
+                  </div>
+                )}
 
                 {/* Admin Role Perspective Switcher */}
                 {currentUser?.role === 'admin' && (
