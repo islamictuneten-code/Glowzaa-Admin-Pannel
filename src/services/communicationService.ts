@@ -52,9 +52,9 @@ function cleanUndefined<T extends Record<string, any>>(obj: T): T {
 }
 
 /**
- * Helper to extract all possible candidate user IDs (uid, id, loginId, staffId, email).
+ * Helper to extract all possible candidate user IDs (uid, id, loginId, staffId, email, phone).
  */
-export function getUserCandidateIds(user: { uid?: string; id?: string; loginId?: string; staffId?: string; salesStaffId?: string; deliveryStaffId?: string; email?: string; [key: string]: any }): string[] {
+export function getUserCandidateIds(user: { uid?: string; id?: string; loginId?: string; staffId?: string; salesStaffId?: string; deliveryStaffId?: string; email?: string; phone?: string; [key: string]: any }): string[] {
   if (!user) return [];
   const raw = [
     user.uid,
@@ -63,7 +63,9 @@ export function getUserCandidateIds(user: { uid?: string; id?: string; loginId?:
     user.staffId,
     user.salesStaffId,
     user.deliveryStaffId,
-    user.email
+    user.email,
+    user.email ? user.email.split('@')[0] : undefined,
+    user.phone
   ];
   const valid = raw.filter(item => typeof item === 'string' && item.trim().length > 0).map(item => item!.trim());
   return Array.from(new Set(valid));
@@ -472,22 +474,33 @@ export async function getCommunicationMessages(
 
 /**
  * Subscribes to real-time conversation messages with automatic delivery marking.
+ * Accepts a single conversation ID or an array of candidate conversation IDs.
  */
 export function subscribeToCommunicationMessages(
-  conversationId: string,
+  conversationId: string | string[],
   currentUserId: string,
   callback: (messages: CommunicationMessage[]) => void
 ): () => void {
-  if (!conversationId) {
+  const ids = (Array.isArray(conversationId) ? conversationId : [conversationId]).filter(Boolean);
+  if (ids.length === 0) {
     callback([]);
     return () => {};
   }
 
-  const q = query(
-    collection(db, 'communication_messages'),
-    where('conversationId', '==', conversationId),
-    limit(150)
-  );
+  let q;
+  if (ids.length === 1) {
+    q = query(
+      collection(db, 'communication_messages'),
+      where('conversationId', '==', ids[0]),
+      limit(150)
+    );
+  } else {
+    q = query(
+      collection(db, 'communication_messages'),
+      where('conversationId', 'in', ids.slice(0, 10)),
+      limit(150)
+    );
+  }
 
   return onSnapshot(
     q,

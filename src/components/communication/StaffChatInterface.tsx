@@ -46,6 +46,7 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
   const { playChime } = useNotification();
 
   const [conversation, setConversation] = useState<CommunicationConversation | null>(null);
+  const [allMatchingConvIds, setAllMatchingConvIds] = useState<string[]>([]);
   const [messages, setMessages] = useState<CommunicationMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -125,9 +126,12 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     const unsubConvs = subscribeToCommunicationConversations(idsToSubscribe, currentUser?.role || 'staff', (convs) => {
       if (!isMounted) return;
       if (convs && convs.length > 0) {
-        // Find conversation where any candidate ID is a participant
-        const myConv = convs.find(c => c.participantIds.some(id => idsToSubscribe.includes(id))) || convs[0];
-        setConversation(myConv);
+        // Find all conversations matching any candidate ID
+        const matchingConvs = convs.filter(c => c.participantIds.some(id => idsToSubscribe.includes(id)));
+        const primaryConv = matchingConvs[0] || convs[0];
+        setConversation(primaryConv);
+        const matchingIds = Array.from(new Set(matchingConvs.map(c => c.id)));
+        setAllMatchingConvIds(matchingIds);
         setLoading(false);
       }
     });
@@ -138,23 +142,24 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     };
   }, [currentUser, adminUser, adminUid, adminName, currentUserId, userCandidateIds]);
 
-  // Subscribe to live messages
+  // Subscribe to live messages across all matching conversation IDs
   useEffect(() => {
-    if (!conversation?.id || !currentUserId) return;
+    const targetConvIds = allMatchingConvIds.length > 0 ? allMatchingConvIds : (conversation?.id ? [conversation.id] : []);
+    if (targetConvIds.length === 0 || !currentUserId) return;
 
-    markAllConversationMessagesSeen(conversation.id, currentUserId);
+    targetConvIds.forEach(cId => markAllConversationMessagesSeen(cId, currentUserId));
 
-    const unsub = subscribeToCommunicationMessages(conversation.id, currentUserId, (msgs) => {
+    const unsub = subscribeToCommunicationMessages(targetConvIds, currentUserId, (msgs) => {
       setMessages(msgs);
-      markAllConversationMessagesSeen(conversation.id, currentUserId);
+      targetConvIds.forEach(cId => markAllConversationMessagesSeen(cId, currentUserId));
     });
 
     return () => {
       unsub();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      setConversationTypingState(conversation.id, currentUserId, false);
+      if (conversation?.id) setConversationTypingState(conversation.id, currentUserId, false);
     };
-  }, [conversation?.id, currentUserId]);
+  }, [allMatchingConvIds, conversation?.id, currentUserId]);
 
   // Auto-scroll
   useEffect(() => {
