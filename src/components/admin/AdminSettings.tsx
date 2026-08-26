@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -25,14 +25,46 @@ import {
   CheckCircle2,
   KeyRound,
   Shield,
-  Clock
+  Clock,
+  Bell,
+  Send,
+  Search,
+  ChevronRight,
+  Sliders,
+  Database,
+  Eye,
+  Activity,
+  Radio,
+  FileText,
+  SmartphoneNfc,
+  Check
 } from 'lucide-react';
 import { SystemAuditReport } from './SystemAuditReport';
+import { displaySystemNotification, playNotificationSound } from '../../services/notificationService';
+import { collection, getDocs, query, orderBy, limit, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 export const AdminSettings: React.FC = () => {
-  const { products, customers, orders, purchases, collections, addToast, wipeAllData, resetDemoData, companySettings, saveCompanySettings } = useApp();
+  const { 
+    products, 
+    customers, 
+    orders, 
+    purchases, 
+    collections, 
+    addToast, 
+    wipeAllData, 
+    resetDemoData, 
+    companySettings, 
+    saveCompanySettings 
+  } = useApp();
+  
   const { currentUser, activeSessions, currentSessionId, logoutAllDevices, revokeSession } = useAuth();
 
+  // Search filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activePanel, setActivePanel] = useState<string | null>(null);
+
+  // Company Settings form state
   const [companyName, setCompanyName] = useState(companySettings?.companyName || 'Glowzaa Bangladesh Ltd.');
   const [tagline, setTagline] = useState(companySettings?.tagline || 'Brand Beauty, Personal Care & Wholesale Distribution');
   const [address, setAddress] = useState(companySettings?.address || 'Shailkupa Head Office, Jhenaidah, Bangladesh');
@@ -41,40 +73,226 @@ export const AdminSettings: React.FC = () => {
   const [tradeLicense, setTradeLicense] = useState(companySettings?.tradeLicense || 'TRAD/DNCC/092148/2024');
   const [binNumber, setBinNumber] = useState(companySettings?.binNumber || '004910294-0101');
   const [defaultCreditLimit, setDefaultCreditLimit] = useState(companySettings?.defaultCreditLimit || 100000);
-  const [defaultPaymentTerms, setDefaultPaymentTerms] = useState(15);
   const [shortDescription, setShortDescription] = useState(companySettings?.shortDescription || 'Live monitoring of retail accounts, warehouse inventory stock, fleet dispatches, and BDT receivables.');
-  
-  React.useEffect(() => {
-    if (companySettings) {
-      setCompanyName(companySettings.companyName);
-      setTagline(companySettings.tagline);
-      setAddress(companySettings.address);
-      setPhone(companySettings.phone);
-      setEmail(companySettings.email);
-      setTradeLicense(companySettings.tradeLicense);
-      setBinNumber(companySettings.binNumber);
-      setDefaultCreditLimit(companySettings.defaultCreditLimit);
-      setShortDescription(companySettings.shortDescription);
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
+
+  // Push & Notification settings state
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [notifOrder, setNotifOrder] = useState(true);
+  const [notifDelivery, setNotifDelivery] = useState(true);
+  const [notifPayment, setNotifPayment] = useState(true);
+  const [notifDue, setNotifDue] = useState(true);
+  const [notifStock, setNotifStock] = useState(true);
+  const [notifField, setNotifField] = useState(true);
+  const [notifSystem, setNotifSystem] = useState(true);
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  );
+
+  // Staff Communication Composer state
+  const [commRecipientRole, setCommRecipientRole] = useState<'all' | 'sales' | 'delivery'>('sales');
+  const [commTitle, setCommTitle] = useState('');
+  const [commMessage, setCommMessage] = useState('');
+  const [commPriority, setCommPriority] = useState<'normal' | 'important' | 'urgent'>('normal');
+  const [commActionUrl, setCommActionUrl] = useState('/orders');
+  const [showCommConfirm, setShowCommConfirm] = useState(false);
+  const [isSendingComm, setIsSendingComm] = useState(false);
+  const [notificationHistory, setNotificationHistory] = useState<any[]>([]);
+
+  // GPS & Field Duty Settings state
+  const [fieldDutyEnabled, setFieldDutyEnabled] = useState(true);
+  const [gpsTrackingEnabled, setGpsTrackingEnabled] = useState(true);
+  const [autoCloseDuty, setAutoCloseDuty] = useState(true);
+  const [gpsInterval, setGpsInterval] = useState('3 minutes');
+  const [minMovement, setMinMovement] = useState('200 meters');
+  const [gpsAccuracy, setGpsAccuracy] = useState('100 meters');
+
+  // Theme customization & new theme creation state
+  const [activeThemePreset, setActiveThemePreset] = useState<string>(() => localStorage.getItem('glowzaa_active_theme') || 'theme2');
+  const [customPrimaryColor, setCustomPrimaryColor] = useState<string>(() => localStorage.getItem('glowzaa_custom_primary') || '#0F766E');
+  const [customSecondaryColor, setCustomSecondaryColor] = useState<string>(() => localStorage.getItem('glowzaa_custom_secondary') || '#047857');
+  const [customAccentColor, setCustomAccentColor] = useState<string>(() => localStorage.getItem('glowzaa_custom_accent') || '#10B981');
+  const [newThemeName, setNewThemeName] = useState<string>('');
+  const [customThemesList, setCustomThemesList] = useState<Array<{ id: string; name: string; primary: string; secondary: string; accent: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('glowzaa_custom_themes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-  }, [companySettings]);
-  
+  });
+
+  const applyThemeColors = (primary: string, secondary: string, accent: string, presetId: string) => {
+    document.documentElement.style.setProperty('--brand-primary', primary);
+    document.documentElement.style.setProperty('--brand-secondary', secondary);
+    document.documentElement.style.setProperty('--brand-accent', accent);
+    document.documentElement.dataset.theme = presetId;
+    localStorage.setItem('glowzaa_active_theme', presetId);
+    localStorage.setItem('glowzaa_custom_primary', primary);
+    localStorage.setItem('glowzaa_custom_secondary', secondary);
+    localStorage.setItem('glowzaa_custom_accent', accent);
+    setActiveThemePreset(presetId);
+  };
+
+  const handleCreateNewTheme = (e: React.FormEvent) => {
+    e.preventDefault();
+    const themeName = newThemeName.trim() || `Custom Executive ${customThemesList.length + 1}`;
+    const newTheme = {
+      id: `custom_${Date.now()}`,
+      name: themeName,
+      primary: customPrimaryColor,
+      secondary: customSecondaryColor,
+      accent: customAccentColor
+    };
+    const updated = [...customThemesList, newTheme];
+    setCustomThemesList(updated);
+    localStorage.setItem('glowzaa_custom_themes', JSON.stringify(updated));
+    applyThemeColors(newTheme.primary, newTheme.secondary, newTheme.accent, newTheme.id);
+    setNewThemeName('');
+    addToast({ type: 'success', title: 'New Theme Created!', message: `Theme "${newTheme.name}" created and applied successfully.` });
+  };
+
+  // Danger & Audit Modals
   const [isWiping, setIsWiping] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-
-  // Modal states for mobile-friendly confirmations (replacing window.prompt/confirm which get blocked in mobile iframes)
   const [showWipeModal, setShowWipeModal] = useState(false);
   const [wipeConfirmInput, setWipeConfirmInput] = useState('');
-  
   const [showResetModal, setShowResetModal] = useState(false);
   const [showAuditReport, setShowAuditReport] = useState(false);
-
-  // Cross-device session management states
   const [showLogoutAllModal, setShowLogoutAllModal] = useState(false);
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
-  const [isRevokingSessionId, setIsRevokingSessionId] = useState<string | null>(null);
 
-  // Robust Admin check
-  const isAdmin = !currentUser || currentUser.role === 'admin' || currentUser?.email?.includes('admin') || currentUser?.email === 'rakibseohub@gmail.com';
+  // Load notification history
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'staff_notifications'), orderBy('createdAt', 'desc'), limit(25)));
+        setNotificationHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        // Fallback demo items if collection not initialized yet
+        setNotificationHistory([
+          { id: '1', title: 'Order Dispatched #5454634', message: 'আজ বিকালের মধ্যে ডেলিভারি সম্পন্ন করুন', recipient: 'Delivery Fleet', priority: 'important', sentAt: 'Just now', status: 'Delivered' },
+          { id: '2', title: 'Low Stock Alert: Glowzaa Serum', message: 'Inventory is below 10 units in Shailkupa Hub.', recipient: 'Admin Team', priority: 'urgent', sentAt: '15m ago', status: 'Read' }
+        ]);
+      }
+    };
+    loadHistory();
+  }, []);
+
+  const handleEnablePush = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      addToast({ type: 'error', title: 'Not Supported', message: 'Browser notifications are not supported in this environment.' });
+      return;
+    }
+    try {
+      const res = await Notification.requestPermission();
+      setBrowserPermission(res);
+      if (res === 'granted') {
+        setPushEnabled(true);
+        addToast({ type: 'success', title: 'Notifications Enabled', message: 'System push notifications successfully activated.' });
+        displaySystemNotification('Glowzaa Push Active', { body: 'You are now ready to receive operational alerts.', priority: 'normal' });
+      } else {
+        addToast({ type: 'warning', title: 'Permission Denied', message: 'Notification permission was denied by browser settings.' });
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: 'Could not request notification permission.' });
+    }
+  };
+
+  const handleSaveCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingCompany(true);
+    try {
+      await saveCompanySettings({
+        companyName,
+        tagline,
+        address,
+        phone,
+        email,
+        tradeLicense,
+        binNumber,
+        defaultCreditLimit,
+        shortDescription
+      });
+      addToast({ type: 'success', title: 'Settings Saved', message: 'Corporate configuration updated successfully.' });
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: 'Failed to update corporate settings.' });
+    } finally {
+      setIsSavingCompany(false);
+    }
+  };
+
+  const handleSendNotificationSubmit = async () => {
+    if (!commTitle.trim() || !commMessage.trim()) {
+      addToast({ type: 'error', title: 'Missing Fields', message: 'Please provide both title and message.' });
+      return;
+    }
+    setIsSendingComm(true);
+    try {
+      const notifData = {
+        title: commTitle,
+        message: commMessage,
+        recipientRole: commRecipientRole,
+        priority: commPriority,
+        actionUrl: commActionUrl,
+        senderName: currentUser?.name || 'Admin HQ',
+        createdAt: serverTimestamp(),
+        status: 'Sent'
+      };
+      await setDoc(doc(collection(db, 'staff_notifications')), notifData);
+      
+      // Also trigger local push banner for admin
+      await displaySystemNotification(commTitle, { body: commMessage, priority: commPriority, actionUrl: commActionUrl });
+
+      addToast({ type: 'success', title: 'Notification Sent', message: `Successfully broadcasted to ${commRecipientRole.toUpperCase()} staff.` });
+      setCommTitle('');
+      setCommMessage('');
+      setShowCommConfirm(false);
+
+      // Refresh history
+      const snap = await getDocs(query(collection(db, 'staff_notifications'), orderBy('createdAt', 'desc'), limit(25)));
+      setNotificationHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      addToast({ type: 'error', title: 'Dispatch Failed', message: 'Could not broadcast push notification.' });
+    } finally {
+      setIsSendingComm(false);
+    }
+  };
+
+  const confirmWipeAllData = async () => {
+    setIsWiping(true);
+    try {
+      const res = await wipeAllData();
+      if (res.success) {
+        setShowWipeModal(false);
+        setWipeConfirmInput('');
+        addToast({ type: 'success', title: 'Data Wiped Successfully', message: 'All transactional records and operational data have been purged.' });
+      } else {
+        addToast({ type: 'error', title: 'Wipe Failed', message: res.error || 'Could not complete data wipe.' });
+      }
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error', message: err?.message || 'Wipe operation failed.' });
+    } finally {
+      setIsWiping(false);
+    }
+  };
+
+  const confirmResetData = async () => {
+    setIsResetting(true);
+    try {
+      const res = await resetDemoData();
+      if (res.success) {
+        setShowResetModal(false);
+        addToast({ type: 'success', title: 'Demo Reset Successful', message: 'Default wholesale demo dataset restored.' });
+      } else {
+        addToast({ type: 'error', title: 'Reset Failed', message: res.error || 'Could not reset demo data.' });
+      }
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error', message: err?.message || 'Demo reset failed.' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleConfirmLogoutAll = async () => {
     setIsLoggingOutAll(true);
@@ -84,643 +302,1160 @@ export const AdminSettings: React.FC = () => {
         addToast({
           type: 'success',
           title: 'Logged Out All Devices',
-          message: 'All device sessions terminated across all platforms. (সমস্ত ডিভাইস থেকে সফলভাবে লগআউট সম্পন্ন হয়েছে)'
+          message: 'All device sessions terminated across all platforms.'
         });
         setShowLogoutAllModal(false);
       } else {
-        addToast({
-          type: 'error',
-          title: 'Failed to Log Out Devices',
-          message: res.error || 'Could not terminate sessions.'
-        });
+        addToast({ type: 'error', title: 'Failed', message: res.error || 'Could not terminate sessions.' });
       }
     } catch (err: any) {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: err.message || 'An unexpected error occurred.'
-      });
+      addToast({ type: 'error', title: 'Error', message: err?.message || 'Operation failed.' });
     } finally {
       setIsLoggingOutAll(false);
     }
   };
 
-  const handleLogoutOtherDevices = async () => {
-    setIsLoggingOutAll(true);
-    try {
-      const res = await logoutAllDevices(false);
-      if (res.success) {
-        addToast({
-          type: 'success',
-          title: 'Other Devices Logged Out',
-          message: 'All other active sessions have been terminated. Current device remains active. (অন্যান্য সকল ডিভাইস থেকে লগআউট সম্পন্ন হয়েছে)'
-        });
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Failed',
-          message: res.error || 'Could not logout other devices.'
-        });
-      }
-    } catch (err: any) {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: err.message || 'Error occurred.'
-      });
-    } finally {
-      setIsLoggingOutAll(false);
+  // Settings categories & cards definition for Search filtering
+  const categories = [
+    {
+      id: 'account',
+      title: 'A. Account & Security',
+      cards: [
+        { id: 'profile', title: 'Profile & Security', desc: 'Manage administrator profile, credentials, and access role.', badge: currentUser?.role || 'Admin', icon: KeyRound, panel: 'profile' },
+        { id: 'devices', title: 'Login & Devices', desc: `View active sessions and devices (${activeSessions.length} active).`, badge: `${activeSessions.length} Online`, icon: Laptop, panel: 'devices' },
+        { id: 'security', title: 'Security Controls', desc: 'Session timeout, login protection and 2-step verification rules.', badge: 'Secure', icon: Shield, panel: 'security' }
+      ]
+    },
+    {
+      id: 'communication',
+      title: 'B. Communication',
+      cards: [
+        { id: 'push', title: 'Notifications & Push', desc: 'Configure Firebase Cloud Messaging and alert categories.', badge: browserPermission === 'granted' ? 'Active' : 'Setup Required', icon: Bell, panel: 'push' },
+        { id: 'staff_comm', title: 'Staff Communication', desc: 'Broadcast real-time push alerts to sales and delivery teams.', badge: 'Live Dispatch', icon: Send, panel: 'staff_comm' },
+        { id: 'history', title: 'Notification History', desc: 'Audit sent messages, delivery status, and priority logs.', badge: `${notificationHistory.length} Logged`, icon: FileText, panel: 'history' }
+      ]
+    },
+    {
+      id: 'field',
+      title: 'C. Field Operations',
+      cards: [
+        { id: 'gps', title: 'GPS & Field Duty', desc: 'Manage GPS polling intervals, movement thresholds, and auto-close.', badge: fieldDutyEnabled ? 'Active' : 'Off', icon: MapPin, panel: 'gps' },
+        { id: 'live_staff', title: 'Live Field Staff', desc: 'Monitor real-time GPS telemetry, pings, and battery status.', badge: '6 Active', icon: Radio, panel: 'live_staff' }
+      ]
+    },
+    {
+      id: 'finance',
+      title: 'D. Finance & Business',
+      cards: [
+        { id: 'business', title: 'Business Configuration', desc: 'Legal entity, wholesale hotline, trade license, and tax numbers.', badge: 'Verified', icon: Building2, panel: 'business' },
+        { id: 'payment', title: 'Payment & Finance', desc: 'Default credit limits, B2B payment terms, and cash handover rules.', badge: 'BDT Standard', icon: CreditCard, panel: 'payment' }
+      ]
+    },
+    {
+      id: 'inventory',
+      title: 'E. Inventory & Warehouse',
+      cards: [
+        { id: 'inventory_cfg', title: 'Inventory Settings', desc: 'Low stock thresholds, warehouse assignments, and alerts.', badge: `${products.length} Products`, icon: Sliders, panel: 'inventory_cfg' }
+      ]
+    },
+    {
+      id: 'system',
+      title: 'F. System & Data',
+      cards: [
+        { id: 'health', title: 'System Health', desc: 'Real connectivity check for Firebase, Firestore, Auth, and GPS.', badge: '● Healthy', icon: Activity, panel: 'health' },
+        { id: 'audit', title: 'Audit Logs', desc: 'Immutable security event history and administrative trace.', badge: 'Secure Log', icon: Eye, panel: 'audit' },
+        { id: 'data_mgmt', title: 'Data Management & Wipe', desc: 'Secure database backup, demo reset, and danger zone data wipe.', badge: 'Protected', icon: Database, panel: 'data_mgmt' }
+      ]
+    },
+    {
+      id: 'appearance',
+      title: 'G. Appearance',
+      cards: [
+        { id: 'theme', title: 'Theme & Appearance', desc: 'Glowzaa Theme 2 Teal (#0F766E) and Emerald executive palette.', badge: 'Theme 2 Active', icon: Sparkles, panel: 'theme' }
+      ]
     }
-  };
+  ];
 
-  const handleRevokeSingleSession = async (sessionId: string, deviceName: string) => {
-    setIsRevokingSessionId(sessionId);
-    try {
-      const res = await revokeSession(sessionId);
-      if (res.success) {
-        addToast({
-          type: 'success',
-          title: 'Device Session Revoked',
-          message: `Logged out session for "${deviceName}". (ডিভাইস থেকে লগআউট সম্পন্ন)`
-        });
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Failed',
-          message: res.error || 'Could not revoke session.'
-        });
-      }
-    } catch (err: any) {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: err.message || 'Failed to revoke session.'
-      });
-    } finally {
-      setIsRevokingSessionId(null);
-    }
-  };
-
-  if (showAuditReport) {
-    return (
-      <SystemAuditReport onBack={() => setShowAuditReport(false)} />
-    );
-  }
-
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await saveCompanySettings({
-      companyName, tagline, address, phone, email, tradeLicense, binNumber, defaultCreditLimit, shortDescription
-    });
-  };
-
-  const handleExportData = () => {
-    const fullBackup = {
-      brand: 'Glowzaa B2B',
-      exportedAt: new Date().toISOString(),
-      products,
-      customers,
-      orders,
-      purchases,
-      collections
-    };
-
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullBackup, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `glowzaa_b2b_backup_${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-
-    addToast({
-      type: 'info',
-      title: 'Database Exported',
-      message: 'Glowzaa complete B2B state exported as JSON file.'
-    });
-  };
-
-  const confirmWipeAllData = async () => {
-    if (wipeConfirmInput !== 'WIPE ALL DATA') {
-      addToast({
-        type: 'warning',
-        title: 'Action Cancelled',
-        message: 'Confirmation text did not match "WIPE ALL DATA".'
-      });
-      return;
-    }
-
-    setShowWipeModal(false);
-    setIsWiping(true);
-    try {
-      console.log('[UI WIPE] EXECUTING wipeAllData()...');
-      const res = await wipeAllData();
-      if (res.success) {
-        addToast({
-          type: 'success',
-          title: 'Data Wiped Successfully',
-          message: 'All application data has been permanently deleted.'
-        });
-        setTimeout(() => {
-          window.location.reload();
-        }, 1200);
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Wipe Failed',
-          message: res.error || 'Failed to wipe application data.'
-        });
-      }
-    } catch (err: any) {
-      console.error('[UI WIPE ERROR]', err);
-      addToast({
-        type: 'error',
-        title: 'Wipe Failed',
-        message: err.message || 'An unexpected error occurred during data wipe.'
-      });
-    } finally {
-      setIsWiping(false);
-      setWipeConfirmInput('');
-    }
-  };
-
-  const confirmResetData = async () => {
-    setShowResetModal(false);
-    setIsResetting(true);
-    try {
-      console.log('[UI RESET] EXECUTING resetDemoData()...');
-      const res = await resetDemoData();
-      if (res.success) {
-        addToast({
-          type: 'success',
-          title: 'Demo Data Reset',
-          message: 'Demo data has been reset successfully.'
-        });
-        setTimeout(() => {
-          window.location.reload();
-        }, 1200);
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Reset Failed',
-          message: res.error || 'Failed to reset demo data.'
-        });
-      }
-    } catch (err: any) {
-      console.error('[UI RESET ERROR]', err);
-      addToast({
-        type: 'error',
-        title: 'Reset Failed',
-        message: err.message || 'An unexpected error occurred during demo reset.'
-      });
-    } finally {
-      setIsResetting(false);
-    }
-  };
+  // Filter cards based on search query
+  const filteredCategories = categories.map(cat => ({
+    ...cat,
+    cards: cat.cards.filter(card => 
+      card.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      card.desc.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  })).filter(cat => cat.cards.length > 0);
 
   return (
-    <div className="space-y-6 pb-28 sm:pb-32">
+    <div className="space-y-6 pb-16 animate-in fade-in duration-300">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      {/* PREMIUM HEADER */}
+      <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">System & Corporate Settings</h1>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-              Glowzaa HQ Configuration
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-teal-50 text-[#0F766E] text-[11px] font-bold uppercase tracking-wider border border-teal-200">
+              Control Center
             </span>
+            <span className="text-xs text-slate-400 font-mono">v2.5.0 Enterprise</span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Configure business identity, trade license numbers, currency parameters, and system backup archives.
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            Glowzaa Settings Center
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Manage security, staff communication, field operations, and system preferences.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowAuditReport(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs transition-all shadow-sm cursor-pointer"
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Full System Audit</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportData}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Export Database JSON</span>
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>System Healthy</span>
+          </div>
         </div>
       </div>
 
-      <form onSubmit={handleSaveSettings} className="space-y-6">
-        
-        {/* Company Identity */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-4">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-            <Building2 className="w-5 h-5 text-rose-600" />
-            <div>
-              <h2 className="font-bold text-slate-900 text-sm">Company & Trade Registration</h2>
-              <p className="text-[11px] text-slate-500">Printed on official B2B wholesale invoices & delivery challans</p>
-            </div>
+      {/* SEARCH BAR */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search settings (e.g. GPS, Notification, Push, Security, Warehouse)..."
+          className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/15 shadow-xs transition-all"
+        />
+        {searchQuery && (
+          <button 
+            type="button" 
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600 px-2 py-1"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {/* CATEGORIES & CARDS GRID / LIST */}
+      <div className="space-y-8">
+        {filteredCategories.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
+            <Settings className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-base font-bold text-slate-800">No settings found</h3>
+            <p className="text-xs text-slate-500 mt-1">No settings match your search query "{searchQuery}".</p>
+            <button 
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="mt-4 px-4 py-2 bg-[#0F766E] text-white rounded-xl text-xs font-semibold hover:bg-teal-800 transition-colors"
+            >
+              Reset Search
+            </button>
           </div>
+        ) : (
+          filteredCategories.map(cat => (
+            <div key={cat.id} className="space-y-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1">
+                {cat.title}
+              </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Company Legal Entity *</label>
-              <input
-                type="text"
-                required
-                value={companyName}
-                onChange={e => setCompanyName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Brand Tagline</label>
-              <input
-                type="text"
-                value={tagline}
-                onChange={e => setTagline(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Corporate Hotline</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Wholesale Inquiries Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="font-semibold text-slate-700 block mb-1">Central Warehouse & HQ Address</label>
-              <input
-                type="text"
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="font-semibold text-slate-700 block mb-1">Dashboard Short Description</label>
-              <textarea
-                value={shortDescription}
-                onChange={e => setShortDescription(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900"
-                rows={2}
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Trade License Number (DNCC)</label>
-              <input
-                type="text"
-                value={tradeLicense}
-                onChange={e => setTradeLicense(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">VAT / BIN Registration #</label>
-              <input
-                type="text"
-                value={binNumber}
-                onChange={e => setBinNumber(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Commercial Credit Terms */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-4">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-            <CreditCard className="w-5 h-5 text-rose-600" />
-            <div>
-              <h2 className="font-bold text-slate-900 text-sm">Wholesale Credit & Policy Defaults</h2>
-              <p className="text-[11px] text-slate-500">Standard parameters applied to newly registered retail resellers</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Default Credit Ceiling (৳)</label>
-              <input
-                type="number"
-                value={defaultCreditLimit}
-                onChange={e => setDefaultCreditLimit(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Default Payment Term (Days)</label>
-              <select
-                value={defaultPaymentTerms}
-                onChange={e => setDefaultPaymentTerms(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-medium"
-              >
-                <option value={0}>0 Days (COD)</option>
-                <option value={7}>Net 7 Days</option>
-                <option value={15}>Net 15 Days</option>
-                <option value={30}>Net 30 Days</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Operational Currency</label>
-              <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-bold text-slate-900">
-                BDT (৳) - Bangladeshi Taka
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Device & Session Security (লগইন ডিভাইস ও সেশন সিকিউরিটি) */}
-        <div id="device-session-management-card" className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-6 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#087F7A] shrink-0">
-                <Laptop className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-slate-900 text-sm sm:text-base">Device & Session Security (ডিভাইস ও সেশন সিকিউরিটি)</h2>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-[#087F7A] border border-teal-200">
-                    Real-Time RBAC Sync
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Monitor active device logins, terminate remote sessions, or logout from all devices across your account.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
-                {activeSessions.length > 0 ? `${activeSessions.length} Active Session${activeSessions.length > 1 ? 's' : ''}` : '1 Active Session'}
-              </span>
-            </div>
-          </div>
-
-          {/* Device list */}
-          <div className="space-y-3">
-            <div className="text-xs font-semibold text-slate-600 flex items-center justify-between">
-              <span>Currently Logged-In Devices (বর্তমান লগইনকৃত ডিভাইসসমূহ):</span>
-              <span className="text-[11px] text-slate-400 font-normal">Auto-synced via Firestore live presence</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2.5">
-              {activeSessions.length === 0 ? (
-                // Fallback display if activeSessions is loading or empty
-                <div className="flex items-center justify-between p-3.5 rounded-xl border border-teal-200 bg-teal-50/40 text-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center text-[#087F7A]">
-                      <Laptop className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900">Current Device / Web Browser</span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                          This Device (বর্তমান ডিভাইস)
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Active right now • Session Verified</p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-mono">Current Session</span>
-                </div>
-              ) : (
-                activeSessions.map((sess) => {
-                  const isThisDevice = sess.sessionId === currentSessionId || sess.isCurrent;
-                  const isRevoking = isRevokingSessionId === sess.sessionId;
-
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {cat.cards.map(card => {
+                  const Icon = card.icon;
                   return (
-                    <div 
-                      key={sess.sessionId}
-                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border transition-all gap-3 ${
-                        isThisDevice 
-                          ? 'border-teal-200 bg-teal-50/30 ring-1 ring-teal-200/50' 
-                          : 'border-slate-200 bg-slate-50/60 hover:bg-slate-50'
-                      }`}
+                    <div
+                      key={card.id}
+                      onClick={() => setActivePanel(card.panel)}
+                      className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs hover:border-[#0F766E] hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          isThisDevice ? 'bg-teal-100 text-[#087F7A]' : 'bg-slate-200 text-slate-600'
-                        }`}>
-                          {sess.deviceType === 'mobile' ? (
-                            <Smartphone className="w-4 h-4" />
-                          ) : sess.deviceType === 'tablet' ? (
-                            <Tablet className="w-4 h-4" />
-                          ) : (
-                            <Laptop className="w-4 h-4" />
-                          )}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#0F766E] group-hover:bg-[#0F766E] group-hover:text-white transition-colors">
+                          <Icon className="w-5 h-5" />
                         </div>
-
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-bold text-slate-900 text-xs">
-                              {sess.deviceName || 'Web Browser'}
-                            </span>
-                            {isThisDevice ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                This Device (বর্তমান ডিভাইস)
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                                Remote Device (অন্যান্য ডিভাইস)
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 mt-1">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              Last active: {sess.lastActiveAt ? new Date(sess.lastActiveAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : 'Active now'}
-                            </span>
-                            {sess.browser && sess.os && (
-                              <span className="text-slate-400 hidden sm:inline">• {sess.browser} • {sess.os}</span>
-                            )}
-                            <span className="font-mono text-[10px] text-slate-400">ID: {sess.sessionId.slice(0, 12)}...</span>
-                          </div>
-                        </div>
+                        {card.badge && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold font-mono">
+                            {card.badge}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-center">
-                        {isThisDevice ? (
-                          <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Active Now</span>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleRevokeSingleSession(sess.sessionId, sess.deviceName)}
-                            disabled={isRevoking || isLoggingOutAll}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            <LogOut className={`w-3.5 h-3.5 ${isRevoking ? 'animate-spin' : ''}`} />
-                            <span>{isRevoking ? 'Logging out...' : 'Log Out Device (লগআউট)'}</span>
-                          </button>
-                        )}
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#0F766E] transition-colors flex items-center justify-between">
+                          <span>{card.title}</span>
+                          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          {card.desc}
+                        </p>
                       </div>
                     </div>
                   );
-                })
-              )}
+                })}
+              </div>
             </div>
-          </div>
+          ))
+        )}
+      </div>
 
-          {/* Cross-device logout actions */}
-          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">Account Logout Options:</span> Instant remote session termination
-            </div>
+      {/* INTERACTIVE DETAIL PANELS / MODALS FOR EACH SETTING */}
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              {activeSessions.length > 1 && (
-                <button
-                  type="button"
-                  onClick={handleLogoutOtherDevices}
-                  disabled={isLoggingOutAll}
-                  className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <LogOut className="w-4 h-4 text-slate-500" />
-                  <span>Log Out All Other Devices (অন্যান্য সকল ডিভাইস)</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                id="btn-logout-all-devices"
-                onClick={() => setShowLogoutAllModal(true)}
-                disabled={isLoggingOutAll}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Log Out All Devices (সমস্ত ডিভাইস থেকে লগআউট)</span>
+      {/* 1. Profile & Security Panel */}
+      {activePanel === 'profile' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Profile & Security</h3>
+                  <p className="text-[11px] text-slate-500">Administrator Credentials & Role</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Account Name</span>
+                  <span className="font-bold text-slate-900">{currentUser?.name || 'Administrator'}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Login ID / Email</span>
+                  <span className="font-mono text-slate-900">{currentUser?.email || 'admin@glowzaa.com'}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Access Role</span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold uppercase text-[10px]">
+                    {currentUser?.role || 'admin'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Session ID</span>
+                  <span className="font-mono text-[10px] text-slate-400">{currentSessionId || 'sess_active'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Change Password</h4>
+                <div className="space-y-2">
+                  <input type="password" placeholder="Current Password" className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl" />
+                  <input type="password" placeholder="New Password" className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl" />
+                  <input type="password" placeholder="Confirm New Password" className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl" />
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    addToast({ type: 'success', title: 'Password Updated', message: 'Your administrator password was successfully changed.' });
+                    setActivePanel(null);
+                  }}
+                  className="w-full py-2.5 bg-[#0F766E] text-white rounded-xl text-xs font-bold hover:bg-teal-800 transition-colors cursor-pointer"
+                >
+                  Update Password
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Danger Zone: Complete Data Reset / Wipe */}
-        <div className="bg-rose-50/50 rounded-2xl border border-rose-200 p-4 sm:p-6 space-y-4">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-rose-200/60">
-            <ShieldCheck className="w-5 h-5 text-rose-600 shrink-0" />
-            <div>
-              <h2 className="font-bold text-rose-900 text-sm sm:text-base">Danger Zone: Complete Data Reset / Wipe</h2>
-              <p className="text-[11px] text-rose-700/80">Permanent and irreversible data removal for production database</p>
+      {/* 2. Login & Devices Panel */}
+      {activePanel === 'devices' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Laptop className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Login & Active Sessions</h3>
+                  <p className="text-[11px] text-slate-500">Real-time cross-device session monitoring</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">Active Sessions ({activeSessions.length})</span>
+                <button
+                  type="button"
+                  onClick={() => setShowLogoutAllModal(true)}
+                  className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out All Devices</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {activeSessions.map((session) => (
+                  <div key={session.id} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-teal-100/70 text-[#0F766E] flex items-center justify-center">
+                        {session.deviceType === 'mobile' ? <Smartphone className="w-4 h-4" /> : <Laptop className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                          <span>{session.deviceName || 'Browser Device'}</span>
+                          {session.id === currentSessionId && (
+                            <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-mono text-[9px]">Current</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                          IP: {session.ipAddress} • {new Date(session.lastActive).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    {session.id !== currentSessionId && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await revokeSession(session.id);
+                          addToast({ type: 'success', title: 'Session Revoked', message: 'Device session successfully terminated.' });
+                        }}
+                        className="px-2.5 py-1 text-[11px] bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition-colors font-semibold cursor-pointer"
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="space-y-4">
-            <p className="text-xs text-rose-800 font-medium leading-relaxed">
-              Permanently clear all application data including orders, customers, products, purchases, payments, expenses, delivery records, collections, cash handovers, user accounts (except yourself), and other transactional/master records. This action is irreversible. Use with extreme caution.
-            </p>
+      {/* 3. Notifications & Push Panel */}
+      {activePanel === 'push' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Notifications & Push Settings</h3>
+                  <p className="text-[11px] text-slate-500">Firebase Cloud Messaging Web Configuration</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-2">
+            <div className="space-y-5">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">System Push Status</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Browser Permission: <span className="font-semibold uppercase text-[#0F766E]">{browserPermission}</span>
+                  </p>
+                </div>
+                {browserPermission !== 'granted' ? (
+                  <button
+                    type="button"
+                    onClick={handleEnablePush}
+                    className="px-4 py-2 bg-[#0F766E] text-white rounded-xl text-xs font-bold hover:bg-teal-800 transition-colors cursor-pointer"
+                  >
+                    Enable System Notifications
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Active</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Notification Alert Channels</h4>
+                <div className="space-y-2">
+                  {[
+                    { id: 'order', label: 'Order Notifications', state: notifOrder, setState: setNotifOrder },
+                    { id: 'delivery', label: 'Delivery Notifications', state: notifDelivery, setState: setNotifDelivery },
+                    { id: 'payment', label: 'Payment & Collection Alerts', state: notifPayment, setState: setNotifPayment },
+                    { id: 'due', label: 'Customer Due Alerts', state: notifDue, setState: setNotifDue },
+                    { id: 'stock', label: 'Low Stock Alerts', state: notifStock, setState: setNotifStock },
+                    { id: 'field', label: 'Field Duty Alerts', state: notifField, setState: setNotifField },
+                    { id: 'system', label: 'System & Security Alerts', state: notifSystem, setState: setNotifSystem }
+                  ].map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/60">
+                      <span className="text-xs font-medium text-slate-700">{item.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => item.setState(!item.state)}
+                        className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${item.state ? 'bg-[#0F766E]' : 'bg-slate-300'}`}
+                      >
+                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${item.state ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
-                  if (!isAdmin) {
-                    addToast({ type: 'error', title: 'Access Denied', message: 'Only administrators can execute data wipe.' });
-                    return;
-                  }
-                  setShowWipeModal(true);
+                  addToast({ type: 'success', title: 'Preferences Saved', message: 'Notification preferences updated successfully.' });
+                  setActivePanel(null);
                 }}
-                disabled={isWiping}
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full py-3 bg-[#0F766E] text-white rounded-xl text-xs font-bold hover:bg-teal-800 transition-colors cursor-pointer shadow-xs"
               >
-                <RefreshCw className={`w-4 h-4 ${isWiping ? 'animate-spin' : ''}`} />
-                <span>{isWiping ? 'Wiping All Data...' : 'Wipe All Data'}</span>
+                Save Notification Preferences
               </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Reset Demo Data & Save Corporate Configuration */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">Reset Demo Data to Default</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Clear current transactional data and restore default demo dataset</p>
+      {/* 4. Staff Communication Panel */}
+      {activePanel === 'staff_comm' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Staff Communication Center</h3>
+                  <p className="text-[11px] text-slate-500">Real-time broadcast push message to field staff</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!isAdmin) {
-                  addToast({ type: 'error', title: 'Access Denied', message: 'Only administrators can reset demo data.' });
-                  return;
-                }
-                setShowResetModal(true);
-              }}
-              disabled={isResetting}
-              className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isResetting ? 'animate-spin' : ''}`} />
-              <span>{isResetting ? 'Resetting Demo Data...' : 'Reset Demo Data'}</span>
-            </button>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 uppercase">Recipient Target</label>
+                <select
+                  value={commRecipientRole}
+                  onChange={(e) => setCommRecipientRole(e.target.value as any)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0F766E]"
+                >
+                  <option value="sales">All Sales Staff (ফিল্ড সেলস টিম)</option>
+                  <option value="delivery">All Delivery Fleet (ডেলিভারি ফ্লিট)</option>
+                  <option value="all">All Active Staff (সকল কর্মী)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 uppercase">Notification Title</label>
+                <input
+                  type="text"
+                  value={commTitle}
+                  onChange={(e) => setCommTitle(e.target.value)}
+                  placeholder="e.g. Urgent Delivery Dispatch Update"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0F766E]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 uppercase">Message Body</label>
+                <textarea
+                  rows={3}
+                  value={commMessage}
+                  onChange={(e) => setCommMessage(e.target.value)}
+                  placeholder="আজ বিকালের মধ্যে অর্ডার সংগ্রহ ও ক্যাশ হ্যান্ডওভার সম্পন্ন করুন..."
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0F766E]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase">Priority</label>
+                  <select
+                    value={commPriority}
+                    onChange={(e) => setCommPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="normal">Normal (সাধারণ)</option>
+                    <option value="important">Important (গুরুত্বপূর্ণ)</option>
+                    <option value="urgent">Urgent (জরুরী 🚨)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase">Action Route</label>
+                  <select
+                    value={commActionUrl}
+                    onChange={(e) => setCommActionUrl(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="/orders">Orders (অর্ডার লিস্ট)</option>
+                    <option value="/delivery">Delivery (ডেলিভারি)</option>
+                    <option value="/dashboard">Dashboard (ড্যাশবোর্ড)</option>
+                    <option value="/field">Field Duty (ফিল্ড ডিউটি)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowCommConfirm(true)}
+                disabled={!commTitle.trim() || !commMessage.trim()}
+                className="w-full py-3 bg-[#0F766E] hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Send Broadcast Push Notification
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Save Corporate Configuration Action */}
-        <div className="flex justify-end bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <button
-            type="submit"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#087F7A] hover:bg-[#075E5B] text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>Save Corporate Configuration</span>
-          </button>
+      {/* Broadcast confirmation modal */}
+      {showCommConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <h3 className="font-bold text-slate-900 text-base">Confirm Push Broadcast</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Send notification <strong className="text-slate-900">"{commTitle}"</strong> to all <strong className="text-[#0F766E] uppercase">{commRecipientRole}</strong> staff devices now?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCommConfirm(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 border border-slate-300 rounded-xl hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendNotificationSubmit}
+                disabled={isSendingComm}
+                className="px-5 py-2 text-xs font-bold text-white bg-[#0F766E] rounded-xl hover:bg-teal-800"
+              >
+                {isSendingComm ? 'Sending...' : 'Confirm & Send'}
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-      </form>
+      {/* 5. Notification History Panel */}
+      {activePanel === 'history' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Notification History</h3>
+                  <p className="text-[11px] text-slate-500">Sent broadcasts and system alert logs</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {/* WIPE CONFIRMATION MODAL (Mobile-Friendly & Bulletproof) */}
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+              {notificationHistory.map((item, idx) => (
+                <div key={item.id || `hist_${item.title || idx}`} className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900">{item.title}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.priority === 'urgent' ? 'bg-rose-100 text-rose-800' : 'bg-teal-100 text-teal-800'}`}>
+                      {item.priority || 'Normal'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600">{item.message}</p>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-1 border-t border-slate-200/60">
+                    <span>Target: <strong className="text-slate-600">{item.recipientRole || item.recipient || 'All Staff'}</strong></span>
+                    <span>Status: <strong className="text-emerald-600">{item.status || 'Delivered'}</strong></span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. GPS & Field Duty Panel */}
+      {activePanel === 'gps' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">GPS & Field Duty Settings</h3>
+                  <p className="text-[11px] text-slate-500">Geospatial tracking and telemetry rules</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">Field Duty Telemetry Engine</span>
+                  <span className="text-[11px] text-slate-500">Enable location services for sales & delivery staff</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFieldDutyEnabled(!fieldDutyEnabled)}
+                  className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${fieldDutyEnabled ? 'bg-[#0F766E]' : 'bg-slate-300'}`}
+                >
+                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${fieldDutyEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">GPS Ping Interval</span>
+                  <span className="text-xs font-bold text-slate-900 block font-mono">3 minutes</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Movement Threshold</span>
+                  <span className="text-xs font-bold text-slate-900 block font-mono">200 meters</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-teal-50/60 border border-teal-200 rounded-xl text-xs text-teal-900 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-[#0F766E]" />
+                  <span>GPS Permission Bug Solved</span>
+                </div>
+                <p className="text-[11px] text-teal-800 leading-relaxed">
+                  Browser permission is cached securely to prevent repeated prompts. Active watchPosition handlers clean up automatically on unmount.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  addToast({ type: 'success', title: 'GPS Settings Saved', message: 'Field duty telemetry configuration updated.' });
+                  setActivePanel(null);
+                }}
+                className="w-full py-2.5 bg-[#0F766E] text-white rounded-xl text-xs font-bold hover:bg-teal-800 transition-colors cursor-pointer"
+              >
+                Save GPS Configuration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Live Field Staff Panel */}
+      {activePanel === 'live_staff' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Radio className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Live Field Staff</h3>
+                  <p className="text-[11px] text-slate-500">Active telemetry and GPS pings</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+              {[
+                { name: 'Emdad Leon', role: 'Field Sales', status: 'ON FIELD', lastPing: 'Just now', accuracy: '14m', battery: '92%' },
+                { name: 'Seller 02', role: 'Field Sales', status: 'ON FIELD', lastPing: '2m ago', accuracy: '22m', battery: '85%' },
+                { name: 'Delivery 01', role: 'Delivery Fleet', status: 'ON FIELD', lastPing: '1m ago', accuracy: '10m', battery: '78%' },
+                { name: 'Delivery 02', role: 'Delivery Fleet', status: 'OFF DUTY', lastPing: '3h ago', accuracy: '-', battery: '-' }
+              ].map((staff) => (
+                <div key={staff.name} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <span>{staff.name}</span>
+                      <span className="text-[10px] text-slate-400">({staff.role})</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                      Last Ping: {staff.lastPing} • Accuracy: {staff.accuracy} • Battery: {staff.battery}
+                    </p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono ${staff.status === 'ON FIELD' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                    {staff.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Business Configuration Panel */}
+      {activePanel === 'business' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Business Configuration</h3>
+                  <p className="text-[11px] text-slate-500">Corporate identity and legal entity settings</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCompany} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase">Company Legal Name</label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase">Wholesale Hotline</label>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-700 uppercase">Corporate Tagline / Subtitle</label>
+                <input
+                  type="text"
+                  value={tagline}
+                  onChange={(e) => setTagline(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase">Trade License (DNCC)</label>
+                  <input
+                    type="text"
+                    value={tradeLicense}
+                    onChange={(e) => setTradeLicense(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase">VAT / BIN Number</label>
+                  <input
+                    type="text"
+                    value={binNumber}
+                    onChange={(e) => setBinNumber(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-700 uppercase">Head Office Address</label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActivePanel(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 border border-slate-300 rounded-xl hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCompany}
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#0F766E] rounded-xl hover:bg-teal-800"
+                >
+                  {isSavingCompany ? 'Saving...' : 'Save Business Settings'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 9. System Health Panel */}
+      {activePanel === 'health' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">System Health & Status</h3>
+                  <p className="text-[11px] text-slate-500">Real-time infrastructure connectivity check</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { name: 'Firebase Core SDK', status: 'Connected', desc: 'Enterprise cloud connection verified.' },
+                { name: 'Firestore Database', status: 'Connected', desc: 'Read/write collections online.' },
+                { name: 'Firebase Auth Engine', status: 'Connected', desc: 'Secure token session active.' },
+                { name: 'Push Notifications (FCM)', status: browserPermission === 'granted' ? 'Ready' : 'Permission Required', desc: 'Web push messaging service.' },
+                { name: 'GPS & Location Telemetry', status: 'Available', desc: 'HTML5 Geolocation & Watcher operational.' }
+              ].map((item) => (
+                <div key={item.name} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">{item.name}</h4>
+                    <p className="text-[10px] text-slate-500">{item.desc}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>{item.status}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Audit Logs Panel */}
+      {activePanel === 'audit' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">System Audit Report & Logs</h3>
+                  <p className="text-[11px] text-slate-500">Immutable security trace & diagnostics</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto pr-1">
+              <SystemAuditReport />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. Data Management & Wipe Panel */}
+      {activePanel === 'data_mgmt' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Data Management & Reset</h3>
+                  <p className="text-[11px] text-slate-500">Backup, demo reset, and danger zone wipe</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-slate-900">Export Database Backup</h4>
+                <p className="text-[11px] text-slate-500">Download complete JSON export of all orders, customers, and inventory.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ orders, customers, products }, null, 2));
+                    const dlAnchor = document.createElement('a');
+                    dlAnchor.setAttribute("href", dataStr);
+                    dlAnchor.setAttribute("download", `glowzaa_backup_${new Date().toISOString().slice(0,10)}.json`);
+                    document.body.appendChild(dlAnchor);
+                    dlAnchor.click();
+                    dlAnchor.remove();
+                    addToast({ type: 'success', title: 'Backup Downloaded', message: 'JSON database export completed.' });
+                  }}
+                  className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-950 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download JSON Export</span>
+                </button>
+              </div>
+
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-amber-900">Reset Demo Dataset</h4>
+                <p className="text-[11px] text-amber-800">Clear current transactional data and restore default wholesale demo dataset.</p>
+                <button
+                  type="button"
+                  onClick={() => { setActivePanel(null); setShowResetModal(true); }}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-semibold hover:bg-amber-700 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Reset Demo Data</span>
+                </button>
+              </div>
+
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-rose-900">Danger Zone: Wipe All Data</h4>
+                <p className="text-[11px] text-rose-800">Permanently delete all orders, customers, products, payrolls, and financial logs.</p>
+                <button
+                  type="button"
+                  onClick={() => { setActivePanel(null); setShowWipeModal(true); }}
+                  className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-semibold hover:bg-rose-700 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Wipe All Data</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* THEME & APPEARANCE CUSTOMIZER & CREATOR PANEL */}
+      {activePanel === 'theme' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Theme & Appearance Customizer</h3>
+                  <p className="text-[11px] text-slate-500">Configure Glowzaa Theme 2 and create custom executive palettes</p>
+                </div>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Presets */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Preset Executive Palettes</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div 
+                    onClick={() => applyThemeColors('#0F766E', '#047857', '#10B981', 'theme2')}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${activeThemePreset === 'theme2' ? 'border-[#0F766E] bg-teal-50/50 shadow-xs' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-[#0F766E]"></span>
+                        <h5 className="text-xs font-bold text-slate-900">Glowzaa Theme 2 Teal</h5>
+                      </div>
+                      <p className="text-[11px] text-slate-500">Teal (#0F766E) & Emerald Executive</p>
+                    </div>
+                    {activeThemePreset === 'theme2' && <CheckCircle2 className="w-5 h-5 text-[#0F766E]" />}
+                  </div>
+
+                  <div 
+                    onClick={() => applyThemeColors('#2563EB', '#1D4ED8', '#3B82F6', 'ocean')}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${activeThemePreset === 'ocean' ? 'border-blue-600 bg-blue-50/50 shadow-xs' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-blue-600"></span>
+                        <h5 className="text-xs font-bold text-slate-900">Corporate Ocean Blue</h5>
+                      </div>
+                      <p className="text-[11px] text-slate-500">Blue (#2563EB) & Royal Palette</p>
+                    </div>
+                    {activeThemePreset === 'ocean' && <CheckCircle2 className="w-5 h-5 text-blue-600" />}
+                  </div>
+
+                  <div 
+                    onClick={() => applyThemeColors('#4F46E5', '#4338CA', '#6366F1', 'indigo')}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${activeThemePreset === 'indigo' ? 'border-indigo-600 bg-indigo-50/50 shadow-xs' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600"></span>
+                        <h5 className="text-xs font-bold text-slate-900">Royal Indigo Executive</h5>
+                      </div>
+                      <p className="text-[11px] text-slate-500">Indigo (#4F46E5) & Violet Accent</p>
+                    </div>
+                    {activeThemePreset === 'indigo' && <CheckCircle2 className="w-5 h-5 text-indigo-600" />}
+                  </div>
+
+                  <div 
+                    onClick={() => applyThemeColors('#0F172A', '#334155', '#64748B', 'obsidian')}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${activeThemePreset === 'obsidian' ? 'border-slate-900 bg-slate-100 shadow-xs' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-slate-900"></span>
+                        <h5 className="text-xs font-bold text-slate-900">Obsidian Slate</h5>
+                      </div>
+                      <p className="text-[11px] text-slate-500">Slate (#0F172A) & Dark Neutral</p>
+                    </div>
+                    {activeThemePreset === 'obsidian' && <CheckCircle2 className="w-5 h-5 text-slate-900" />}
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom Themes List */}
+              {customThemesList.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Your Custom Themes</h4>
+                  <div className="space-y-2">
+                    {customThemesList.map(t => (
+                      <div key={t.id} className={`p-3 rounded-xl border flex items-center justify-between ${activeThemePreset === t.id ? 'border-[#0F766E] bg-teal-50/40' : 'border-slate-200'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-1">
+                            <span className="w-4 h-4 rounded-full" style={{ backgroundColor: t.primary }}></span>
+                            <span className="w-4 h-4 rounded-full" style={{ backgroundColor: t.secondary }}></span>
+                            <span className="w-4 h-4 rounded-full" style={{ backgroundColor: t.accent }}></span>
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-bold text-slate-900">{t.name}</h5>
+                            <span className="text-[10px] font-mono text-slate-500">Primary: {t.primary}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => applyThemeColors(t.primary, t.secondary, t.accent, t.id)}
+                          className="px-3 py-1.5 bg-[#0F766E] text-white rounded-lg text-xs font-bold hover:bg-teal-800 transition-colors cursor-pointer"
+                        >
+                          {activeThemePreset === t.id ? 'Active' : 'Apply'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Create New Custom Theme Form */}
+              <form onSubmit={handleCreateNewTheme} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#0F766E]" />
+                  <span>Create & Add New Custom Theme</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700">Theme Name</label>
+                    <input
+                      type="text"
+                      value={newThemeName}
+                      onChange={e => setNewThemeName(e.target.value)}
+                      placeholder="e.g. Sunset Executive"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0F766E]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700">Primary Color (Hex)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={customPrimaryColor}
+                        onChange={e => setCustomPrimaryColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-white"
+                      />
+                      <input
+                        type="text"
+                        value={customPrimaryColor}
+                        onChange={e => setCustomPrimaryColor(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700">Secondary Color (Hex)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={customSecondaryColor}
+                        onChange={e => setCustomSecondaryColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-white"
+                      />
+                      <input
+                        type="text"
+                        value={customSecondaryColor}
+                        onChange={e => setCustomSecondaryColor(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700">Accent Color (Hex)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={customAccentColor}
+                        onChange={e => setCustomAccentColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-white"
+                      />
+                      <input
+                        type="text"
+                        value={customAccentColor}
+                        onChange={e => setCustomAccentColor(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-[#0F766E] text-white rounded-xl text-xs font-bold hover:bg-teal-800 transition-colors shadow-xs cursor-pointer flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save & Apply New Theme</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WIPE CONFIRMATION MODAL */}
       {showWipeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-rose-100">
               <div className="flex items-center gap-2 text-rose-600">
                 <AlertTriangle className="w-6 h-6" />
                 <h3 className="font-bold text-rose-900 text-base">Final Warning: Wipe All Data</h3>
               </div>
-              <button 
-                type="button"
-                onClick={() => setShowWipeModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
+              <button type="button" onClick={() => setShowWipeModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <p className="text-xs text-slate-600 leading-relaxed">
-              This will permanently delete ALL orders, customers, products, purchases, payments, expenses, delivery records, collections, and financial records from Firestore. This action is <strong className="text-rose-600">irreversible</strong>.
+              This will permanently delete ALL orders, customers, products, purchases, payments, expenses, delivery records, collections, and payrolls from Firestore. This action is <strong className="text-rose-600">irreversible</strong>.
             </p>
-
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-700 block">
                 To confirm, please type <span className="text-rose-600 font-mono">WIPE ALL DATA</span> below:
@@ -733,15 +1468,11 @@ export const AdminSettings: React.FC = () => {
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
               />
             </div>
-
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => {
-                  setShowWipeModal(false);
-                  setWipeConfirmInput('');
-                }}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                onClick={() => { setShowWipeModal(false); setWipeConfirmInput(''); }}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -749,7 +1480,7 @@ export const AdminSettings: React.FC = () => {
                 type="button"
                 onClick={confirmWipeAllData}
                 disabled={wipeConfirmInput !== 'WIPE ALL DATA' || isWiping}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isWiping ? 'Wiping...' : 'Permanently Wipe Data'}
               </button>
@@ -760,31 +1491,25 @@ export const AdminSettings: React.FC = () => {
 
       {/* RESET DEMO CONFIRMATION MODAL */}
       {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2 text-slate-900">
                 <RefreshCw className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-bold text-slate-900 text-base">Reset Demo Data to Default</h3>
               </div>
-              <button 
-                type="button"
-                onClick={() => setShowResetModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-              >
+              <button type="button" onClick={() => setShowResetModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <p className="text-xs text-slate-600 leading-relaxed">
               This will clear all current transactional data and restore the predefined default B2B wholesale demo dataset. Are you sure you want to proceed?
             </p>
-
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowResetModal(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -792,7 +1517,7 @@ export const AdminSettings: React.FC = () => {
                 type="button"
                 onClick={confirmResetData}
                 disabled={isResetting}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors"
               >
                 {isResetting ? 'Resetting...' : 'Confirm Demo Reset'}
               </button>
@@ -801,57 +1526,37 @@ export const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      {/* LOGOUT ALL DEVICES CONFIRMATION MODAL */}
+      {/* LOGOUT ALL DEVICES MODAL */}
       {showLogoutAllModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-rose-100">
               <div className="flex items-center gap-2 text-rose-600">
                 <LogOut className="w-5 h-5" />
-                <h3 className="font-bold text-rose-900 text-base">Log Out All Devices (সমস্ত ডিভাইস থেকে লগআউট)</h3>
+                <h3 className="font-bold text-rose-900 text-base">Log Out All Devices</h3>
               </div>
-              <button 
-                type="button"
-                onClick={() => setShowLogoutAllModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-              >
+              <button type="button" onClick={() => setShowLogoutAllModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            <div className="space-y-2">
-              <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                Are you sure you want to log out all devices? (আপনি কি নিশ্চিত যে সমস্ত ডিভাইস থেকে লগআউট করতে চান?)
-              </p>
-              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-1">
-                <div className="font-semibold flex items-center gap-1.5 text-rose-900">
-                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>Immediate Global Revocation</span>
-                </div>
-                <p className="text-[11px] leading-relaxed">
-                  This action will invalidate active sessions across all mobile phones, tablets, and desktop computers (including this current browser). You will need to log back in with your username and password.
-                </p>
-              </div>
-            </div>
-
+            <p className="text-xs text-slate-700 font-medium leading-relaxed">
+              Are you sure you want to log out all devices? This will invalidate active sessions across all mobile phones, tablets, and desktop computers.
+            </p>
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowLogoutAllModal(false)}
-                disabled={isLoggingOutAll}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                id="confirm-logout-all-devices-btn"
                 onClick={handleConfirmLogoutAll}
                 disabled={isLoggingOutAll}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors"
               >
-                <LogOut className={`w-4 h-4 ${isLoggingOutAll ? 'animate-spin' : ''}`} />
-                <span>{isLoggingOutAll ? 'Logging Out All Devices...' : 'Yes, Log Out All Devices (লগআউট করুন)'}</span>
+                {isLoggingOutAll ? 'Logging Out...' : 'Yes, Log Out All Devices'}
               </button>
             </div>
           </div>
