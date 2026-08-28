@@ -9,11 +9,13 @@ import {
   ShieldCheck, 
   Circle,
   Filter,
-  Sparkles
+  Sparkles,
+  Phone
 } from 'lucide-react';
 import { AuthUser, CommunicationConversation, CommunicationDevice } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
 import { PresenceBadge, getStaffOnlineStatus } from './PresenceBadge';
+import { VoiceCallButton } from './VoiceCallButton';
 
 interface ConversationListProps {
   currentUserId: string;
@@ -261,9 +263,17 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             const { status } = getStaffOnlineStatus(staffUid, devices);
 
             return (
-              <button
+              <div
                 key={staffUid}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelectStaff(staff)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectStaff(staff);
+                  }
+                }}
                 className={`w-full p-3 sm:p-3.5 flex items-start gap-3 transition-all text-left cursor-pointer relative ${
                   isSelected
                     ? 'bg-teal-50/80 border-l-4 border-[#087F7A]'
@@ -304,11 +314,21 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                       </span>
                     </div>
 
-                    {conv?.lastMessageAt && (
-                      <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap shrink-0">
-                        {formatTime(conv.lastMessageAt)}
-                      </span>
-                    )}
+                    {/* Last Message Time & Quick Call Action */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {conv?.lastMessageAt && (
+                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                          {formatTime(conv.lastMessageAt)}
+                        </span>
+                      )}
+
+                      <VoiceCallButton
+                        receiver={staff}
+                        conversationId={conv?.id}
+                        showLabel={false}
+                        className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer shrink-0"
+                      />
+                    </div>
                   </div>
 
                   {/* Territory / Area Tag if present */}
@@ -345,7 +365,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                     )}
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })
         )}

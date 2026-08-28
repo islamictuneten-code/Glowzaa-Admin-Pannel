@@ -259,29 +259,36 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-1.5">
-          <VoiceCallButton receiver={staffUser} conversationId={conversationId || undefined} className="border border-slate-200" />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <VoiceCallButton
+            receiver={staffUser}
+            conversationId={conversationId || undefined}
+            showLabel={true}
+            label="Call"
+            className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold transition-all bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+          />
           
           {staffUser.phone && (
             <a
               href={`tel:${staffUser.phone}`}
-              className="p-2 text-slate-600 hover:text-[#087F7A] hover:bg-teal-50 rounded-xl transition-colors border border-slate-200 cursor-pointer"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 text-slate-700 hover:text-[#087F7A] hover:bg-teal-50 rounded-xl transition-colors border border-slate-200 cursor-pointer flex items-center gap-1 text-xs font-bold"
               title={`Call ${staffUser.name} (${staffUser.phone}) via mobile network`}
             >
-              <Phone className="w-4 h-4" />
+              <Phone className="w-3.5 h-3.5 text-teal-600" />
+              <span className="hidden md:inline">Mobile</span>
             </a>
           )}
 
           <button
             onClick={() => setShowTemplates(!showTemplates)}
-            className={`p-2 rounded-xl transition-colors border text-xs font-bold flex items-center gap-1 cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-xl transition-colors border text-xs font-bold flex items-center gap-1 cursor-pointer ${
               showTemplates
                 ? 'bg-[#087F7A] text-white border-[#087F7A] shadow-2xs'
                 : 'text-slate-600 border-slate-200 hover:bg-slate-100'
             }`}
             title="Quick response templates"
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Templates</span>
           </button>
         </div>

@@ -11,6 +11,7 @@ import {
   Clock, 
   Building2,
   Phone,
+  PhoneCall,
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -32,6 +33,7 @@ import {
 } from '../../services/communicationService';
 import { UserAvatar } from '../shared/UserAvatar';
 import { PresenceBadge } from './PresenceBadge';
+import { VoiceCallButton } from './VoiceCallButton';
 
 interface StaffChatInterfaceProps {
   adminUser?: AuthUser | null;
@@ -191,6 +193,18 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     return otherParticipant || adminUid;
   }, [conversation, currentUserId, adminUid]);
 
+  // Receiver user object for VoiceCallButton
+  const adminReceiver: AuthUser = useMemo(() => {
+    return adminUser || {
+      uid: actualReceiverUid || 'admin_hq',
+      id: actualReceiverUid || 'admin_hq',
+      name: adminName || 'Admin HQ',
+      email: 'admin@glowzaa.com',
+      role: 'admin',
+      phone: '01700000000'
+    };
+  }, [adminUser, actualReceiverUid, adminName]);
+
   // Send message
   const handleSendMessage = async (customText?: string) => {
     const textToSend = (customText || inputText).trim();
@@ -247,40 +261,61 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
     <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[calc(100dvh-130px)] sm:h-[calc(100vh-140px)] min-h-[380px] max-w-5xl mx-auto text-left mb-16 sm:mb-0">
       
       {/* Top Header - Auto Responsive for Mobile */}
-      <div className="p-3 sm:p-4 bg-gradient-to-r from-teal-950 via-[#087F7A] to-teal-900 text-white flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 shadow-md shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 flex items-center justify-center text-white shrink-0 shadow-2xs">
-            <ShieldCheck className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-emerald-300" />
+      <div className="p-3 sm:p-4 bg-gradient-to-r from-teal-950 via-[#087F7A] to-teal-900 text-white flex items-center justify-between gap-2 shadow-md shrink-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 flex items-center justify-center text-white shrink-0 shadow-2xs">
+            <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <h2 className="font-extrabold text-sm sm:text-base tracking-tight truncate">
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-extrabold text-xs sm:text-base tracking-tight truncate">
                 HQ Administration
               </h2>
-              <span className="text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 uppercase tracking-wide shrink-0">
-                Official Support
+              <span className="text-[8px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 uppercase tracking-wide shrink-0 hidden xs:inline-block">
+                Support
               </span>
             </div>
-            <p className="text-[11px] sm:text-xs text-teal-100/80 mt-0.5 flex items-center gap-1.5 truncate">
+            <p className="text-[10px] sm:text-xs text-teal-100/80 flex items-center gap-1 truncate">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="truncate">Glowzaa B2B Central Ops • Real-time Active</span>
+              <span className="truncate">Glowzaa B2B HQ</span>
             </p>
           </div>
         </div>
 
-        {/* Action Button */}
-        <button
-          onClick={() => setShowTemplates(!showTemplates)}
-          className={`px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-            showTemplates
-              ? 'bg-white text-[#087F7A] shadow-xs'
-              : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-300 sm:text-white" />
-          <span className="hidden xs:inline sm:inline">Quick Responses</span>
-          <span className="inline xs:hidden sm:hidden">Templates</span>
-        </button>
+        {/* Action Buttons - Always Visible */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <VoiceCallButton
+            receiver={adminReceiver}
+            conversationId={conversation?.id || undefined}
+            showLabel={true}
+            label="Call HQ"
+            className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold transition-all bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
+          />
+
+          {adminReceiver.phone && (
+            <a
+              href={`tel:${adminReceiver.phone}`}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center gap-1 cursor-pointer shrink-0"
+              title={`Call HQ Admin (${adminReceiver.phone}) via mobile network`}
+            >
+              <Phone className="w-3.5 h-3.5 text-teal-200" />
+              <span className="hidden md:inline">SIM</span>
+            </a>
+          )}
+
+          <button
+            onClick={() => setShowTemplates(!showTemplates)}
+            className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer ${
+              showTemplates
+                ? 'bg-white text-[#087F7A] shadow-xs'
+                : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+            }`}
+            title="Quick response templates"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span className="hidden sm:inline">Templates</span>
+          </button>
+        </div>
       </div>
 
       {/* Quick Templates Drawer */}
@@ -325,13 +360,40 @@ export const StaffChatInterface: React.FC<StaffChatInterfaceProps> = ({
           </div>
         ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-            <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#087F7A] mb-3">
-              <MessageSquare className="w-6 h-6" />
+            <div className="w-14 h-14 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 mb-3 shadow-2xs">
+              <MessageSquare className="w-7 h-7" />
             </div>
-            <h3 className="font-extrabold text-sm text-[#102A2A]">Direct Line to Admin HQ</h3>
-            <p className="text-xs text-slate-400 max-w-xs mt-1">
-              Ask questions about orders, payments, dispatch schedules, or send field updates directly to management.
+            <h3 className="font-extrabold text-base text-[#102A2A]">Direct Line to Admin HQ</h3>
+            <p className="text-xs text-slate-500 max-w-xs mt-1 leading-relaxed">
+              Ask questions about orders, payments, dispatch schedules, or make an instant voice call directly to HQ.
             </p>
+
+            {/* Quick Call Action Bar in Empty State */}
+            <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-slate-50 border border-emerald-500/20 max-w-sm w-full flex flex-col items-center gap-3 shadow-2xs">
+              <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                <PhoneCall className="w-4 h-4 text-emerald-600 animate-bounce" />
+                Need urgent assistance from Admin?
+              </span>
+              <div className="flex items-center gap-2 w-full">
+                <VoiceCallButton
+                  receiver={adminReceiver}
+                  conversationId={conversation?.id || undefined}
+                  showLabel={true}
+                  label="Start Voice Call"
+                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
+                />
+                {adminReceiver.phone && (
+                  <a
+                    href={`tel:${adminReceiver.phone}`}
+                    className="py-2.5 px-3 rounded-xl text-xs font-extrabold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
+                    title={`Call HQ (${adminReceiver.phone})`}
+                  >
+                    <Phone className="w-4 h-4 text-teal-600" />
+                    <span>SIM</span>
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
         ) : (
           messages.map((msg) => {

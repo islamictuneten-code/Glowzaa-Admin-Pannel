@@ -11,9 +11,19 @@ interface VoiceCallButtonProps {
   receiver: AuthUser;
   conversationId?: string;
   className?: string;
+  showLabel?: boolean;
+  label?: string;
+  children?: React.ReactNode;
 }
 
-export const VoiceCallButton: React.FC<VoiceCallButtonProps> = ({ receiver, conversationId, className = '' }) => {
+export const VoiceCallButton: React.FC<VoiceCallButtonProps> = ({ 
+  receiver, 
+  conversationId, 
+  className = '',
+  showLabel = false,
+  label = 'Voice Call',
+  children
+}) => {
   const { currentUser } = useAuth();
   const { addToast } = useApp();
   const [isStarting, setIsStarting] = useState(false);
@@ -93,14 +103,24 @@ export const VoiceCallButton: React.FC<VoiceCallButtonProps> = ({ receiver, conv
     }
   };
 
+  const defaultClasses = className || "p-2 rounded-xl border border-[#087F7A]/30 bg-teal-50 text-[#087F7A] hover:bg-teal-100 transition-colors cursor-pointer flex items-center gap-1.5";
+
   return (
     <button
-      onClick={handleStartCall}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleStartCall();
+      }}
       disabled={isStarting}
-      title={`Call ${receiver.name || 'User'} via Voice`}
-      className={`p-2 rounded-full hover:bg-gray-100 transition-colors ${className}`}
+      title={`Call ${receiver?.name || 'User'} via Voice`}
+      className={defaultClasses}
     >
-      <Phone className={`w-5 h-5 ${isStarting ? 'animate-pulse text-gray-400' : 'text-[#087F7A]'}`} />
+      {children ? children : (
+        <>
+          <PhoneCall className={`w-4 h-4 ${isStarting ? 'animate-pulse text-amber-500' : ''}`} />
+          {showLabel && <span className="text-xs font-bold">{isStarting ? 'Calling...' : label}</span>}
+        </>
+      )}
     </button>
   );
 };
