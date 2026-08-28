@@ -37,20 +37,11 @@ export const VoiceCallButton: React.FC<VoiceCallButtonProps> = ({
       // Check if mic is available before proceeding
       await voiceCallManager.requestMicrophonePermission();
       
-      // Check if caller is busy
-      let callerBusy = await checkUserBusyStatus(currentUser.uid);
-      if (callerBusy) {
-        // Attempt auto force cleanup of stuck calls if any
-        const { forceCleanupUserActiveCalls } = await import('../../services/voiceCallSignalingService');
-        await forceCleanupUserActiveCalls(currentUser.uid);
-        // Re-check busy status after cleanup
-        callerBusy = await checkUserBusyStatus(currentUser.uid);
-        if (callerBusy) {
-          addToast({ title: 'Call Failed', message: 'You are currently in an active call.', type: 'warning' });
-          return;
-        }
-      }
+      // Auto force cleanup any leftover/stuck call records for current user
+      const { forceCleanupUserActiveCalls } = await import('../../services/voiceCallSignalingService');
+      await forceCleanupUserActiveCalls(currentUser.uid);
       
+      // Check if receiver is busy
       const receiverBusy = await checkUserBusyStatus(receiver.uid);
       if (receiverBusy) {
         if (currentUser.role === 'admin') {

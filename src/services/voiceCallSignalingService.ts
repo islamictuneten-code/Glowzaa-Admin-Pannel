@@ -177,35 +177,65 @@ export const sendIceCandidate = async (
  */
 export const forceCleanupUserActiveCalls = async (userId: string): Promise<void> => {
   const now = new Date().toISOString();
+  const promises: Promise<any>[] = [];
   
-  const outgoingQ = query(
-    collection(db, 'communication_calls'),
-    where('callerId', '==', userId),
-    where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
-  );
-  const outgoingSnap = await getDocs(outgoingQ);
-  for (const docSnap of outgoingSnap.docs) {
-    await updateDoc(doc(db, 'communication_calls', docSnap.id), {
-      status: 'ended',
-      endReason: 'User forced call reset',
-      endedAt: now,
-      updatedAt: now
-    }).catch(console.warn);
-  }
+  try {
+    const outgoingQ = query(
+      collection(db, 'communication_calls'),
+      where('callerId', '==', userId),
+      where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
+    );
+    const outgoingSnap = await getDocs(outgoingQ);
+    for (const docSnap of outgoingSnap.docs) {
+      promises.push(
+        updateDoc(doc(db, 'communication_calls', docSnap.id), {
+          status: 'ended',
+          endReason: 'User forced call reset',
+          endedAt: now,
+          updatedAt: now
+        }).catch(console.warn)
+      );
+    }
 
-  const incomingQ = query(
-    collection(db, 'communication_calls'),
-    where('receiverId', '==', userId),
-    where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
-  );
-  const incomingSnap = await getDocs(incomingQ);
-  for (const docSnap of incomingSnap.docs) {
-    await updateDoc(doc(db, 'communication_calls', docSnap.id), {
-      status: 'ended',
-      endReason: 'User forced call reset',
-      endedAt: now,
-      updatedAt: now
-    }).catch(console.warn);
+    const incomingQ = query(
+      collection(db, 'communication_calls'),
+      where('receiverId', '==', userId),
+      where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
+    );
+    const incomingSnap = await getDocs(incomingQ);
+    for (const docSnap of incomingSnap.docs) {
+      promises.push(
+        updateDoc(doc(db, 'communication_calls', docSnap.id), {
+          status: 'ended',
+          endReason: 'User forced call reset',
+          endedAt: now,
+          updatedAt: now
+        }).catch(console.warn)
+      );
+    }
+
+    // Clean up group calls for user
+    const groupQ = query(
+      collection(db, 'communication_group_calls'),
+      where('participantIds', 'array-contains', userId),
+      where('status', 'in', ['initializing', 'active'])
+    );
+    const groupSnap = await getDocs(groupQ);
+    for (const docSnap of groupSnap.docs) {
+      const data = docSnap.data();
+      if (data.participants?.[userId]) {
+        promises.push(
+          updateDoc(doc(db, 'communication_group_calls', docSnap.id), {
+            [`participants.${userId}.status`]: 'left',
+            updatedAt: now
+          }).catch(console.warn)
+        );
+      }
+    }
+
+    await Promise.all(promises);
+  } catch (err) {
+    console.warn('Error during forceCleanupUserActiveCalls:', err);
   }
 };
 
@@ -214,95 +244,112 @@ export const forceCleanupUserActiveCalls = async (userId: string): Promise<void>
  */
 export const checkUserBusyStatus = async (userId: string): Promise<boolean> => {
   const now = Date.now();
-  const STALE_CALLING_MS = 45 * 1000; // 45 seconds for unanswered calling/ringing
+  const STALE_CALLING_MS = 30 * 1000; // 30 seconds for unanswered calling/ringing
   const STALE_CONNECTED_MS = 6 * 60 * 60 * 1000; // 6 hours for connected calls
 
   let isBusy = false;
+  const cleanupPromises: Promise<any>[] = [];
 
-  // Check active outgoing calls
-  const outgoingQ = query(
-    collection(db, 'communication_calls'),
-    where('callerId', '==', userId),
-    where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
-  );
-  
-  const outgoingSnap = await getDocs(outgoingQ);
-  for (const docSnap of outgoingSnap.docs) {
-    const call = docSnap.data() as VoiceCall;
-    const createdAtMs = new Date(call.createdAt || call.startedAt || Date.now()).getTime();
-    const ageMs = now - createdAtMs;
+  try {
+    // Check active outgoing calls
+    const outgoingQ = query(
+      collection(db, 'communication_calls'),
+      where('callerId', '==', userId),
+      where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
+    );
+    
+    const outgoingSnap = await getDocs(outgoingQ);
+    for (const docSnap of outgoingSnap.docs) {
+      const call = docSnap.data() as VoiceCall;
+      const createdAtMs = new Date(call.createdAt || call.startedAt || Date.now()).getTime();
+      const ageMs = now - createdAtMs;
 
-    if (['calling', 'ringing', 'connecting'].includes(call.status) && ageMs > STALE_CALLING_MS) {
-      // Auto-cleanup stale call
-      updateDoc(doc(db, 'communication_calls', call.id), {
-        status: 'missed',
-        endReason: 'Timeout/Stale cleanup',
-        endedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }).catch(console.warn);
-    } else if (call.status === 'connected' && ageMs > STALE_CONNECTED_MS) {
-      updateDoc(doc(db, 'communication_calls', call.id), {
-        status: 'ended',
-        endReason: 'Stale connection cleanup',
-        endedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }).catch(console.warn);
-    } else {
-      isBusy = true;
+      if (['calling', 'ringing', 'connecting'].includes(call.status) && ageMs > STALE_CALLING_MS) {
+        // Auto-cleanup stale call
+        cleanupPromises.push(
+          updateDoc(doc(db, 'communication_calls', call.id), {
+            status: 'missed',
+            endReason: 'Timeout/Stale cleanup',
+            endedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }).catch(console.warn)
+        );
+      } else if (call.status === 'connected' && ageMs > STALE_CONNECTED_MS) {
+        cleanupPromises.push(
+          updateDoc(doc(db, 'communication_calls', call.id), {
+            status: 'ended',
+            endReason: 'Stale connection cleanup',
+            endedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }).catch(console.warn)
+        );
+      } else {
+        isBusy = true;
+      }
     }
+    
+    // Check active incoming calls
+    const incomingQ = query(
+      collection(db, 'communication_calls'),
+      where('receiverId', '==', userId),
+      where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
+    );
+    
+    const incomingSnap = await getDocs(incomingQ);
+    for (const docSnap of incomingSnap.docs) {
+      const call = docSnap.data() as VoiceCall;
+      const createdAtMs = new Date(call.createdAt || call.startedAt || Date.now()).getTime();
+      const ageMs = now - createdAtMs;
+
+      if (['calling', 'ringing', 'connecting'].includes(call.status) && ageMs > STALE_CALLING_MS) {
+        cleanupPromises.push(
+          updateDoc(doc(db, 'communication_calls', call.id), {
+            status: 'missed',
+            endReason: 'Timeout/Stale cleanup',
+            endedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }).catch(console.warn)
+        );
+      } else if (call.status === 'connected' && ageMs > STALE_CONNECTED_MS) {
+        cleanupPromises.push(
+          updateDoc(doc(db, 'communication_calls', call.id), {
+            status: 'ended',
+            endReason: 'Stale connection cleanup',
+            endedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }).catch(console.warn)
+        );
+      } else {
+        isBusy = true;
+      }
+    }
+
+    // Check group calls
+    const groupQ = query(
+      collection(db, 'communication_group_calls'),
+      where('participantIds', 'array-contains', userId),
+      where('status', 'in', ['initializing', 'active'])
+    );
+    const groupSnap = await getDocs(groupQ);
+    groupSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      const myStatus = data.participants?.[userId]?.status;
+      const createdAtMs = new Date(data.createdAt || Date.now()).getTime();
+      const ageMs = now - createdAtMs;
+
+      if ((myStatus === 'invited' || myStatus === 'ringing') && ageMs > STALE_CALLING_MS) {
+        // ignore stale group invites
+      } else if (myStatus === 'invited' || myStatus === 'ringing' || myStatus === 'connected') {
+        isBusy = true;
+      }
+    });
+
+    if (cleanupPromises.length > 0) {
+      await Promise.all(cleanupPromises);
+    }
+  } catch (err) {
+    console.warn('Error checking user busy status:', err);
   }
-  
-  // Check active incoming calls
-  const incomingQ = query(
-    collection(db, 'communication_calls'),
-    where('receiverId', '==', userId),
-    where('status', 'in', ['calling', 'ringing', 'connecting', 'connected'])
-  );
-  
-  const incomingSnap = await getDocs(incomingQ);
-  for (const docSnap of incomingSnap.docs) {
-    const call = docSnap.data() as VoiceCall;
-    const createdAtMs = new Date(call.createdAt || call.startedAt || Date.now()).getTime();
-    const ageMs = now - createdAtMs;
-
-    if (['calling', 'ringing', 'connecting'].includes(call.status) && ageMs > STALE_CALLING_MS) {
-      updateDoc(doc(db, 'communication_calls', call.id), {
-        status: 'missed',
-        endReason: 'Timeout/Stale cleanup',
-        endedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }).catch(console.warn);
-    } else if (call.status === 'connected' && ageMs > STALE_CONNECTED_MS) {
-      updateDoc(doc(db, 'communication_calls', call.id), {
-        status: 'ended',
-        endReason: 'Stale connection cleanup',
-        endedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }).catch(console.warn);
-    } else {
-      isBusy = true;
-    }
-  }
-
-  // Check group calls
-  const groupQ = query(
-    collection(db, 'communication_group_calls'),
-    where('participantIds', 'array-contains', userId),
-    where('status', 'in', ['initializing', 'active'])
-  );
-  const groupSnap = await getDocs(groupQ);
-  groupSnap.forEach(docSnap => {
-    const data = docSnap.data();
-    const myStatus = data.participants?.[userId]?.status;
-    const createdAtMs = new Date(data.createdAt || Date.now()).getTime();
-    const ageMs = now - createdAtMs;
-
-    if ((myStatus === 'invited' || myStatus === 'ringing') && ageMs > STALE_CALLING_MS) {
-      // ignore stale group invites
-    } else if (myStatus === 'invited' || myStatus === 'ringing' || myStatus === 'connected') {
-      isBusy = true;
-    }
-  });
 
   return isBusy;
 };
