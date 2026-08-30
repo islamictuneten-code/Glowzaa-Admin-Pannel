@@ -37,12 +37,29 @@ import {
   Sparkles,
   ShieldAlert,
   Award,
-  Wallet
+  Wallet,
+  Search,
+  ChevronRight,
+  ChevronDown,
+  Plus
 } from 'lucide-react';
 
 interface SidebarProps {
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+}
+
+interface AdminSubItem {
+  id: string; // Unique leaf ID for active state
+  tabId: AdminTab; // Underlying route/tab
+  label: string;
+}
+
+interface AdminCategoryGroup {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  items: AdminSubItem[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile }) => {
@@ -66,6 +83,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const { currentUser, logout } = useAuth();
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    dashboard: true,
+    sales_orders: true,
+    customers_crm: true
+  });
+  
+  // Independent active leaf menu item state (ensures ONLY ONE leaf is active at a time)
+  const [activeMenuItem, setActiveMenuItem] = useState<string>('business_overview');
 
   const currentUserId = currentUser?.uid || (currentUser as any)?.id || '';
 
@@ -79,10 +105,217 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     return () => unsub();
   }, [currentUserId, role]);
 
+  // Admin Categorized Navigation Groups with UNIQUE IDs for each submenu item
+  const adminCategories: AdminCategoryGroup[] = [
+    {
+      id: 'dashboard',
+      title: 'Dashboard',
+      icon: <LayoutDashboard className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'executive_dashboard', tabId: 'executive_bi', label: 'Executive Dashboard' },
+        { id: 'business_overview', tabId: 'dashboard', label: 'Business Overview' },
+        { id: 'smart_business_alerts', tabId: 'business_alerts', label: 'Smart Business Alerts' },
+        { id: 'action_center', tabId: 'business_alerts', label: 'Action Center' }
+      ]
+    },
+    {
+      id: 'sales_orders',
+      title: 'Sales & Orders',
+      icon: <ShoppingCart className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'orders_list', tabId: 'orders', label: 'Orders' },
+        { id: 'orders_new', tabId: 'orders', label: 'New Order' },
+        { id: 'orders_pos', tabId: 'orders', label: 'POS' },
+        { id: 'orders_quotations', tabId: 'orders', label: 'Quotations' },
+        { id: 'orders_invoices', tabId: 'orders', label: 'Sales Invoices' },
+        { id: 'orders_returns', tabId: 'orders', label: 'Returns & Refunds' },
+        { id: 'sales_analytics', tabId: 'sales_intelligence', label: 'Sales Analytics' },
+        { id: 'sales_forecasting', tabId: 'sales_forecast', label: 'Sales Forecasting' },
+        { id: 'reorder_intelligence', tabId: 'customer_intelligence', label: 'Reorder Intelligence' }
+      ]
+    },
+    {
+      id: 'products',
+      title: 'Products',
+      icon: <Package className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'products_all', tabId: 'products', label: 'All Products' },
+        { id: 'products_add', tabId: 'products', label: 'Add New Product' },
+        { id: 'products_variants', tabId: 'products', label: 'Product Variants' },
+        { id: 'categories_list', tabId: 'categories', label: 'Categories' },
+        { id: 'products_brands', tabId: 'products', label: 'Brands' },
+        { id: 'barcode_management', tabId: 'products', label: 'Barcode Management' },
+        { id: 'barcode_label_printing', tabId: 'products', label: 'Barcode Label Printing' },
+        { id: 'product_pricing', tabId: 'price_intelligence', label: 'Product Pricing' },
+        { id: 'product_images', tabId: 'products', label: 'Product Images' },
+        { id: 'product_import_export', tabId: 'products', label: 'Product Import / Export' }
+      ]
+    },
+    {
+      id: 'inventory',
+      title: 'Inventory',
+      icon: <Boxes className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'inventory_overview', tabId: 'inventory', label: 'Inventory Overview' },
+        { id: 'stock_in', tabId: 'purchases', label: 'Stock In' },
+        { id: 'stock_out', tabId: 'inventory', label: 'Stock Out' },
+        { id: 'stock_transactions', tabId: 'inventory', label: 'Stock Transactions' },
+        { id: 'stock_adjustments', tabId: 'inventory', label: 'Stock Adjustments' },
+        { id: 'warehouse_management', tabId: 'warehouses', label: 'Warehouse Management' },
+        { id: 'warehouse_locations', tabId: 'warehouses', label: 'Warehouse Locations' },
+        { id: 'low_stock', tabId: 'inventory', label: 'Low Stock' },
+        { id: 'reorder_management', tabId: 'inventory', label: 'Reorder Management' },
+        { id: 'inventory_intelligence', tabId: 'inventory_intelligence', label: 'Inventory Intelligence' },
+        { id: 'inventory_reports', tabId: 'inventory_reports', label: 'Inventory Reports' }
+      ]
+    },
+    {
+      id: 'customers_crm',
+      title: 'Customers & CRM',
+      icon: <Users className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'customers_all', tabId: 'customers', label: 'All Customers' },
+        { id: 'customer_360', tabId: 'customers', label: 'Customer 360°' },
+        { id: 'customer_due', tabId: 'customer_due', label: 'Customer Due' },
+        { id: 'credit_control', tabId: 'customers', label: 'Credit Control' },
+        { id: 'customer_intelligence', tabId: 'customer_intelligence', label: 'Customer Intelligence' },
+        { id: 'customer_purchase_history', tabId: 'customers', label: 'Customer Purchase History' },
+        { id: 'customer_ledger', tabId: 'customers', label: 'Customer Ledger' },
+        { id: 'sales_pipeline', tabId: 'sales_crm', label: 'Sales Pipeline' },
+        { id: 'crm_tasks', tabId: 'sales_crm', label: 'CRM Tasks' }
+      ]
+    },
+    {
+      id: 'procurement',
+      title: 'Procurement',
+      icon: <ShoppingBag className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'suppliers', tabId: 'purchases', label: 'Suppliers' },
+        { id: 'purchase_orders', tabId: 'purchase_orders', label: 'Purchase Orders' },
+        { id: 'purchase_stock_in', tabId: 'purchases', label: 'Purchase / Stock In' },
+        { id: 'goods_received', tabId: 'goods_receipts', label: 'Goods Received' },
+        { id: 'supplier_payments', tabId: 'payments', label: 'Supplier Payments' },
+        { id: 'supplier_performance', tabId: 'supplier_performance', label: 'Supplier Performance' },
+        { id: 'procurement_analytics', tabId: 'smart_procurement', label: 'Procurement Analytics' }
+      ]
+    },
+    {
+      id: 'finance_accounts',
+      title: 'Finance & Accounts',
+      icon: <Wallet className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'cash_flow', tabId: 'cash_flow_center', label: 'Cash Flow' },
+        { id: 'payments', tabId: 'payments', label: 'Payments' },
+        { id: 'collections', tabId: 'collections', label: 'Collections' },
+        { id: 'finance_customer_due', tabId: 'customer_due', label: 'Customer Due' },
+        { id: 'expenses', tabId: 'expenses', label: 'Expenses' },
+        { id: 'bank_accounts', tabId: 'cash_flow_center', label: 'Bank Accounts' },
+        { id: 'cash_handover', tabId: 'collections', label: 'Cash Handover' },
+        { id: 'delivery_cash_reconciliation', tabId: 'collections', label: 'Delivery Cash Reconciliation' },
+        { id: 'profit_loss', tabId: 'profit_loss', label: 'Profit & Loss' },
+        { id: 'financial_reports', tabId: 'sales_reports', label: 'Financial Reports' }
+      ]
+    },
+    {
+      id: 'reports_analytics',
+      title: 'Reports & Analytics',
+      icon: <BarChart3 className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'sales_reports', tabId: 'sales_reports', label: 'Sales Reports' },
+        { id: 'purchase_reports', tabId: 'sales_reports', label: 'Purchase Reports' },
+        { id: 'report_inventory_reports', tabId: 'inventory_reports', label: 'Inventory Reports' },
+        { id: 'customer_reports', tabId: 'customer_intelligence', label: 'Customer Reports' },
+        { id: 'staff_performance', tabId: 'sales_staff', label: 'Staff Performance' },
+        { id: 'delivery_reports', tabId: 'delivery_staff', label: 'Delivery Reports' },
+        { id: 'field_sales_reports', tabId: 'field_tracking', label: 'Field Sales Reports' },
+        { id: 'report_financial_reports', tabId: 'profit_loss', label: 'Financial Reports' },
+        { id: 'business_intelligence', tabId: 'executive_bi', label: 'Business Intelligence' },
+        { id: 'ai_insights', tabId: 'sales_intelligence', label: 'AI Insights' },
+        { id: 'export_center', tabId: 'sales_reports', label: 'Export Center' }
+      ]
+    },
+    {
+      id: 'communication',
+      title: 'Communication',
+      icon: <MessageSquare className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'staff_messages', tabId: 'messages', label: 'Staff Messages' },
+        { id: 'message_inbox', tabId: 'messages', label: 'Message Inbox' },
+        { id: 'sent_messages', tabId: 'messages', label: 'Sent Messages' },
+        { id: 'message_templates', tabId: 'messages', label: 'Message Templates' }
+      ]
+    },
+    {
+      id: 'field_operations',
+      title: 'Field Operations',
+      icon: <MapPin className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'field_sales_tracking', tabId: 'field_tracking', label: 'Field Sales Tracking' },
+        { id: 'live_seller_map', tabId: 'field_tracking', label: 'Live Seller Map' },
+        { id: 'seller_locations', tabId: 'field_tracking', label: 'Seller Locations' },
+        { id: 'shop_visits', tabId: 'field_tracking', label: 'Shop Visits' },
+        { id: 'route_history', tabId: 'field_tracking', label: 'Route History' },
+        { id: 'gps_activity', tabId: 'field_tracking', label: 'GPS Activity' },
+        { id: 'field_duty_monitoring', tabId: 'field_tracking', label: 'Field Duty Monitoring' },
+        { id: 'field_performance', tabId: 'field_tracking', label: 'Field Performance' }
+      ]
+    },
+    {
+      id: 'settings_config',
+      title: 'Settings & Configuration',
+      icon: <Settings className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'company_settings', tabId: 'settings', label: 'Company Settings' },
+        { id: 'business_profile', tabId: 'settings', label: 'Business Profile' },
+        { id: 'pricing_discounts', tabId: 'settings', label: 'Pricing & Discounts' },
+        { id: 'tax_vat', tabId: 'settings', label: 'Tax / VAT' },
+        { id: 'units_measurement', tabId: 'settings', label: 'Units & Measurement' },
+        { id: 'order_settings', tabId: 'settings', label: 'Order Settings' },
+        { id: 'inventory_settings', tabId: 'settings', label: 'Inventory Settings' },
+        { id: 'pos_settings', tabId: 'settings', label: 'POS Settings' },
+        { id: 'barcode_settings', tabId: 'settings', label: 'Barcode Settings' },
+        { id: 'communication_settings', tabId: 'settings', label: 'Communication Settings' },
+        { id: 'theme_appearance', tabId: 'settings', label: 'Theme & Appearance' }
+      ]
+    },
+    {
+      id: 'system_management',
+      title: 'System Management',
+      icon: <ShieldCheck className="w-4 h-4 text-[#0F766E]" />,
+      items: [
+        { id: 'staff_user_accounts', tabId: 'staff_management', label: 'Staff / User Accounts' },
+        { id: 'roles_permissions', tabId: 'staff_management', label: 'Roles & Permissions' },
+        { id: 'staff_hr_payroll', tabId: 'payroll', label: 'Staff HR & Payroll' },
+        { id: 'sales_staff', tabId: 'sales_staff', label: 'Sales Staff' },
+        { id: 'delivery_staff', tabId: 'delivery_staff', label: 'Delivery Staff' },
+        { id: 'audit_logs', tabId: 'settings', label: 'Audit Logs' },
+        { id: 'security', tabId: 'settings', label: 'Security' },
+        { id: 'sessions_devices', tabId: 'settings', label: 'Sessions / Devices' },
+        { id: 'data_management', tabId: 'settings', label: 'Data Management' },
+        { id: 'backup_restore', tabId: 'settings', label: 'Backup / Restore' },
+        { id: 'demo_data', tabId: 'settings', label: 'Demo Data' },
+        { id: 'system_diagnostics', tabId: 'settings', label: 'System Diagnostics' }
+      ]
+    }
+  ];
+
+  // Sync activeMenuItem with adminTab changes
+  useEffect(() => {
+    if (role === 'admin' && adminTab) {
+      const allItems = adminCategories.flatMap(c => c.items);
+      const currentActiveItem = allItems.find(i => i.id === activeMenuItem);
+      if (!currentActiveItem || currentActiveItem.tabId !== adminTab) {
+        const firstMatch = allItems.find(i => i.tabId === adminTab);
+        if (firstMatch) {
+          setActiveMenuItem(firstMatch.id);
+        }
+      }
+    }
+  }, [adminTab, role]);
+
   // Badges calculation
   const pendingExpensesCount = (expenses || []).filter(e => e && !e.deleted && e.status === 'pending').length;
   const pendingOrdersCount = (orders || []).filter(o => o && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
-  const packingOrdersCount = (orders || []).filter(o => o && (o.orderStatus === 'confirmed' || o.orderStatus === 'packing')).length;
   const lowStockCount = (products || []).filter(p => p && (p.status === 'low_stock' || p.status === 'out_of_stock')).length;
   const overdueCustomersCount = (customers || []).filter(c => c && (c.currentDue || 0) > 0).length;
   
@@ -94,51 +327,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
   const myPendingDeliveries = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')).length;
   const myCompletedToday = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && o.orderStatus === 'delivered').length;
   const myReturnedCount = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && o.orderStatus === 'returned').length;
-
-  const adminNavItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'executive_bi', label: 'Executive BI Dashboard', icon: <BarChart3 className="w-4 h-4 text-teal-600" /> },
-    { id: 'cash_flow_center', label: 'Cash Flow & Financial Control', icon: <Wallet className="w-4 h-4 text-emerald-600" /> },
-    { id: 'sales_intelligence', label: 'Sales & AI Intelligence', icon: <Sparkles className="w-4 h-4 text-amber-500" /> },
-    { 
-      id: 'messages', 
-      label: 'Staff Messages', 
-      icon: <MessageSquare className="w-4 h-4 text-[#087F7A]" />, 
-      badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined, 
-      badgeColor: 'bg-[#087F7A] text-white animate-pulse' 
-    },
-    { id: 'field_tracking', label: 'Field Sales Tracking', icon: <MapPin className="w-4 h-4 text-[#087F7A]" /> },
-    { id: 'products', label: 'Products', icon: <Package className="w-4 h-4" /> },
-    { id: 'categories', label: 'Categories', icon: <Layers className="w-4 h-4" /> },
-    { id: 'inventory', label: 'Inventory', icon: <Boxes className="w-4 h-4" />, badge: lowStockCount > 0 ? `${lowStockCount} alert` : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
-    { id: 'customers', label: 'Customers', icon: <Users className="w-4 h-4" /> },
-    { id: 'orders', label: 'Orders', icon: <ShoppingCart className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
-    { id: 'packing', label: 'Packing / Warehouse', icon: <Boxes className="w-4 h-4" />, badge: packingOrdersCount > 0 ? packingOrdersCount : undefined, badgeColor: 'bg-teal-100 text-teal-800' },
-    { id: 'purchases', label: 'Purchase / Stock In', icon: <ShoppingBag className="w-4 h-4" /> },
-    { id: 'purchase_orders', label: 'Purchase Orders', icon: <ShoppingBag className="w-4 h-4" /> },
-    { id: 'goods_receipts', label: 'Goods Receiving', icon: <Truck className="w-4 h-4" /> },
-    { id: 'supplier_performance', label: 'Supplier Performance', icon: <Award className="w-4 h-4 text-[#0F766E]" /> },
-    { id: 'price_intelligence', label: 'Price Intelligence', icon: <TrendingUp className="w-4 h-4 text-[#0F766E]" /> },
-    { id: 'smart_procurement', label: 'Smart Procurement', icon: <Sparkles className="w-4 h-4 text-[#0F766E]" /> },
-    { id: 'expenses', label: 'Operating Expenses', icon: <Banknote className="w-4 h-4" />, badge: pendingExpensesCount > 0 ? pendingExpensesCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
-    { id: 'payroll', label: 'Staff HR & Payroll', icon: <Calculator className="w-4 h-4 text-[#087F7A]" /> },
-    { id: 'staff_management', label: 'Staff / User Accounts', icon: <ShieldCheck className="w-4 h-4 text-[#087F7A]" /> },
-    { id: 'sales_staff', label: 'Sales Staff', icon: <UserCheck className="w-4 h-4" /> },
-    { id: 'delivery_staff', label: 'Delivery Staff', icon: <Truck className="w-4 h-4" /> },
-    { id: 'payments', label: 'Payments', icon: <CreditCard className="w-4 h-4" /> },
-    { id: 'customer_due', label: 'Customer Due', icon: <AlertCircle className="w-4 h-4" />, badge: overdueCustomersCount > 0 ? overdueCustomersCount : undefined, badgeColor: 'bg-red-100 text-red-800' },
-    { id: 'collections', label: 'Collections', icon: <Receipt className="w-4 h-4" /> },
-    { id: 'sales_reports', label: 'Reports', icon: <BarChart3 className="w-4 h-4" /> },
-    { id: 'inventory_reports', label: 'Inventory Reports', icon: <FileSpreadsheet className="w-4 h-4" /> },
-    { id: 'profit_loss', label: 'Profit & Loss', icon: <Calculator className="w-4 h-4" /> },
-    { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
-    { id: 'sales_forecast', label: 'Sales Forecast & Trends', icon: <TrendingUp className="w-4 h-4 text-emerald-600" /> },
-    { id: 'inventory_intelligence', label: 'Inventory Intelligence', icon: <Boxes className="w-4 h-4 text-[#0F766E]" /> },
-    { id: 'customer_intelligence', label: 'Customer Intelligence', icon: <Users className="w-4 h-4 text-[#0F766E]" /> },
-    { id: 'sales_crm', label: 'Sales CRM & Tasks', icon: <CheckSquare className="w-4 h-4 text-[#0F766E]" /> },
-    { id: 'business_alerts', label: 'Business Alerts', icon: <ShieldAlert className="w-4 h-4 text-rose-500" /> },
-    { id: 'warehouses', label: 'Warehouse Management', icon: <Building2 className="w-4 h-4" /> },
-  ];
 
   const salesNavItems: { id: SalesTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -185,9 +373,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'my_salary', label: 'My Salary & Slips', icon: <Calculator className="w-4 h-4 text-[#087F7A]" /> },
   ];
 
-  const handleTabClick = (id: string) => {
-    if (role === 'admin') setAdminTab(id as AdminTab);
-    else if (role === 'sales') setSalesTab(id as SalesTab);
+  const handleAdminSubItemClick = (sub: AdminSubItem) => {
+    setActiveMenuItem(sub.id);
+    setAdminTab(sub.tabId);
+    onCloseMobile();
+  };
+
+  const handleSalesOrDeliveryTabClick = (id: string) => {
+    if (role === 'sales') setSalesTab(id as SalesTab);
     else if (role === 'delivery') setDeliveryTab(id as DeliveryTab);
     onCloseMobile();
   };
@@ -202,11 +395,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     onCloseMobile();
   };
 
-  const currentItems = role === 'admin' 
-    ? adminNavItems 
-    : role === 'sales' 
-      ? salesNavItems 
-      : deliveryNavItems;
+  const toggleCategory = (catId: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [catId]: !prev[catId]
+    }));
+  };
+
+  // Filter categories and sub-items based on menuSearchQuery
+  const filteredAdminCategories = adminCategories.map(cat => {
+    if (!menuSearchQuery.trim()) return cat;
+    const query = menuSearchQuery.toLowerCase();
+    const matchCat = cat.title.toLowerCase().includes(query);
+    const matchingItems = cat.items.filter(item => item.label.toLowerCase().includes(query) || matchCat);
+    return {
+      ...cat,
+      items: matchCat ? cat.items : matchingItems
+    };
+  }).filter(cat => cat.items.length > 0 || cat.title.toLowerCase().includes(menuSearchQuery.toLowerCase()));
 
   const activeTabId = role === 'admin' 
     ? adminTab 
@@ -233,24 +439,114 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
         {/* Navigation list */}
         <div className="flex-1 overflow-y-auto px-3 py-3.5 space-y-4">
           
-          {/* Active Role Label */}
-          <div>
-            <div className="px-2.5 mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          {/* Active Role Label & Search Menu */}
+          <div className="space-y-3">
+            <div className="px-2.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <span>
-                {role === 'admin' ? 'Admin Portal' : role === 'sales' ? 'Sales Portal' : 'Delivery Portal'}
+                {role === 'admin' ? 'Admin Navigation 2.0' : role === 'sales' ? 'Sales Portal' : 'Delivery Portal'}
               </span>
               <span className={`w-2 h-2 rounded-full ${
                 role === 'admin' ? 'bg-[#087F7A]' : role === 'sales' ? 'bg-[#16A085]' : 'bg-[#22A06B]'
               }`}></span>
             </div>
 
+            {role === 'admin' && (
+              <div className="relative px-0.5">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search menu..."
+                  value={menuSearchQuery}
+                  onChange={e => setMenuSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#087F7A]"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Quick Actions (Admin Only) */}
+          {role === 'admin' && !menuSearchQuery && (
+            <div className="px-0.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 mb-1.5">
+                Quick Actions
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 px-0.5">
+                <button
+                  onClick={() => handleAdminSubItemClick({ id: 'orders_new', tabId: 'orders', label: 'New Order' })}
+                  className="flex items-center gap-1.5 px-2 py-1.5 bg-teal-50 text-[#087F7A] rounded-lg text-xs font-semibold hover:bg-teal-100 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" /> New Order
+                </button>
+                <button
+                  onClick={() => handleAdminSubItemClick({ id: 'products_add', tabId: 'products', label: 'Add New Product' })}
+                  className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" /> Add Product
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Nav items rendering */}
+          {role === 'admin' ? (
+            <nav className="space-y-1.5">
+              {filteredAdminCategories.map((cat) => {
+                const isExpanded = menuSearchQuery.trim() ? true : !!expandedCategories[cat.id];
+                // Parent is highlighted ONLY if one of its children contains the unique activeMenuItem
+                const hasActiveChild = cat.items.some(item => item.id === activeMenuItem);
+
+                return (
+                  <div key={cat.id} className="space-y-0.5">
+                    <button
+                      onClick={() => toggleCategory(cat.id)}
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer group ${
+                        hasActiveChild ? 'bg-teal-50/80 text-[#087F7A]' : 'text-slate-700 hover:bg-slate-50 hover:text-[#087F7A]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="shrink-0 text-slate-500 group-hover:text-[#087F7A]">
+                          {cat.icon}
+                        </span>
+                        <span className="truncate">{cat.title}</span>
+                      </div>
+                      <span className="text-slate-400">
+                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="pl-6 space-y-0.5 my-1 border-l-2 border-teal-100 ml-4">
+                        {cat.items.map((sub, idx) => {
+                          // Strict single leaf active state check
+                          const isSubActive = activeMenuItem === sub.id;
+                          return (
+                            <button
+                              key={`${sub.id}-${idx}`}
+                              onClick={() => handleAdminSubItemClick(sub)}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                                isSubActive
+                                  ? 'bg-[#087F7A] text-white font-bold shadow-xs'
+                                  : 'text-slate-600 hover:bg-teal-50/60 hover:text-[#087F7A] font-medium'
+                              }`}
+                            >
+                              <span className="truncate">{sub.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </nav>
+          ) : (
             <nav className="space-y-1">
-              {currentItems.map((item) => {
+              {(role === 'sales' ? salesNavItems : deliveryNavItems).map((item) => {
                 const isActive = activeTabId === item.id;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => handleTabClick(item.id)}
+                    onClick={() => handleSalesOrDeliveryTabClick(item.id)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer group ${
                       isActive
                         ? 'bg-[#087F7A] text-white shadow-xs'
@@ -275,7 +571,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
                 );
               })}
             </nav>
-          </div>
+          )}
 
           {/* Quick Context Summary Box */}
           <div className="px-0.5 pt-1">
