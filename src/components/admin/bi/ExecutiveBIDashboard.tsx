@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../../context/AppContext';
+import { useAuth } from '../../../context/AuthContext';
 import { 
   DateRangeFilter, 
   DateRangePreset, 
   ComparisonMode, 
   ExecutiveBISettings, 
-  ExecutiveKPI 
+  ExecutiveKPI,
+  AuthUser 
 } from '../../../types';
 import { 
   buildDateRangeFilter,
@@ -56,15 +58,23 @@ import {
 } from 'lucide-react';
 
 export const ExecutiveBIDashboard: React.FC = () => {
+  const { currentUser: authCurrentUser } = useAuth();
   const { 
     orders = [], 
     products = [], 
     customers = [], 
     expenses = [], 
     salesStaff = [], 
-    categoryDocs = [], 
-    currentUser 
+    categoryDocs = [] 
   } = useApp() || {};
+
+  const effectiveUser: AuthUser = authCurrentUser || {
+    uid: 'admin-hq',
+    name: 'Glowzaa Admin',
+    email: 'admin@glowzaa.com',
+    role: 'admin',
+    department: 'Operations & Executive HQ'
+  };
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<'overview' | 'profitability' | 'customers' | 'sellers' | 'geography'>('overview');
@@ -436,15 +446,13 @@ export const ExecutiveBIDashboard: React.FC = () => {
         issues={dataQualityIssues}
       />
 
-      {currentUser && (
-        <ExecutiveSettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          settings={settings}
-          onSaved={updated => setSettings(updated)}
-          currentUser={currentUser}
-        />
-      )}
+      <ExecutiveSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSaved={updated => setSettings(updated)}
+        currentUser={effectiveUser}
+      />
 
       <ExecutiveKPIDrilldownDrawer
         kpi={selectedDrilldownKPI}
