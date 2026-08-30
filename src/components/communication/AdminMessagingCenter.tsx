@@ -17,7 +17,6 @@ import {
   getOrCreateCommunicationConversation, 
   getUserCandidateIds 
 } from '../../services/communicationService';
-import { subscribeCommunicationDevices } from '../../services/notificationService';
 import { ConversationList } from './ConversationList';
 import { ConversationView } from './ConversationView';
 
@@ -28,7 +27,7 @@ interface AdminMessagingCenterProps {
 export const AdminMessagingCenter: React.FC<AdminMessagingCenterProps> = ({ staffUsers }) => {
   const { currentUser } = useAuth();
   const [conversations, setConversations] = useState<CommunicationConversation[]>([]);
-  const [devices, setDevices] = useState<CommunicationDevice[]>([]);
+  const [devices] = useState<CommunicationDevice[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<AuthUser | null>(null);
   const [activeConversation, setActiveConversation] = useState<CommunicationConversation | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,13 +41,8 @@ export const AdminMessagingCenter: React.FC<AdminMessagingCenterProps> = ({ staf
       setConversations(list);
     });
 
-    const unsubDevices = subscribeCommunicationDevices((devList) => {
-      setDevices(devList);
-    });
-
     return () => {
       unsubConv();
-      unsubDevices();
     };
   }, [currentUserId]);
 

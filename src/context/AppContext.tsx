@@ -65,6 +65,7 @@ import {
   assignSalesSellerToCustomerInFirestore,
   deleteCustomerFromFirestore,
   checkDuplicatePhoneInFirestore,
+  updateCustomerCreditControlInFirestore,
   createOrderInFirestore,
   confirmOrderInFirestore,
   cancelOrderInFirestore,
@@ -260,6 +261,18 @@ interface AppContextType {
   reconcileCollection: (collectionId: string) => void;
   handoverDeliveryCash: (deliveryStaffId: string) => void;
   addCustomer: (customer: Omit<Customer, 'id' | 'totalPurchase' | 'totalPaid' | 'currentDue' | 'lastOrderDate' | 'createdAt'>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  updateCustomerCreditControl: (
+    customerId: string,
+    creditSettings: {
+      creditLimit: number;
+      creditCheckMode: any;
+      creditHold: boolean;
+      creditHoldReason?: string;
+      creditReviewDate?: string;
+      creditNote?: string;
+    },
+    previousCustomer: Customer
+  ) => Promise<{ success: boolean; error?: string }>;
   addPurchase: (purchase: Omit<PurchaseBill, 'id' | 'billNumber'>) => PurchaseBill;
   addCategory: (categoryName: string) => void;
 
@@ -1973,6 +1986,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return res;
   };
 
+  const updateCustomerCreditControl = async (
+    customerId: string,
+    creditSettings: {
+      creditLimit: number;
+      creditCheckMode: any;
+      creditHold: boolean;
+      creditHoldReason?: string;
+      creditReviewDate?: string;
+      creditNote?: string;
+    },
+    previousCustomer: Customer
+  ) => {
+    if (!currentUser) {
+      addToast({ type: 'error', title: 'Authentication Required', message: 'You must be signed in.' });
+      return { success: false, error: 'User unauthenticated' };
+    }
+    if (currentUser.role !== 'admin') {
+      addToast({ type: 'error', title: 'Access Denied', message: 'Only Administrators can change credit limits and terms.' });
+      return { success: false, error: 'Unauthorized role' };
+    }
+
+    const res = await updateCustomerCreditControlInFirestore(customerId, creditSettings, previousCustomer, currentUser);
+    if (res.success) {
+      addToast({
+        type: 'success',
+        title: 'Credit Policy Updated',
+        message: `Credit control settings for ${previousCustomer.shopName} updated successfully.`
+      });
+      if (viewingCustomer && viewingCustomer.id === customerId) {
+        setViewingCustomer({
+          ...viewingCustomer,
+          creditLimit: creditSettings.creditLimit,
+          creditCheckMode: creditSettings.creditCheckMode,
+          creditHold: creditSettings.creditHold,
+          creditHoldReason: creditSettings.creditHoldReason,
+          creditReviewDate: creditSettings.creditReviewDate,
+          creditNote: creditSettings.creditNote
+        } as Customer);
+      }
+    } else {
+      addToast({
+        type: 'error',
+        title: 'Credit Update Failed',
+        message: res.error || 'Could not update credit settings.'
+      });
+    }
+    return res;
+  };
+
   const toggleCustomerStatus = async (customerId: string, currentStatus: 'active' | 'inactive') => {
     const res = await toggleCustomerStatusInFirestore(customerId, currentStatus);
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
@@ -2216,6 +2278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reconcileCollection,
         handoverDeliveryCash,
         addCustomer,
+        updateCustomerCreditControl,
         addPurchase,
 
         viewingOrder,

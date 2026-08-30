@@ -23,7 +23,6 @@ import {
   CommunicationMessageStatus,
   ParticipantTypingState 
 } from '../types';
-import { sendCommunicationNotification } from './notificationService';
 
 /**
  * Generates a deterministic, sorted conversation ID between two users.
@@ -255,39 +254,7 @@ export async function sendCommunicationMessage(params: {
       [`typing.${sender.uid}.isTyping`]: false
     }));
 
-    // 3. Dispatch Push Notification to Receiver (FCM + Web Chime)
-    const notifTitle = sender.role === 'admin' 
-      ? 'Admin HQ Direct Message' 
-      : `${sender.name} (${(sender.role || 'staff').toUpperCase()})`;
-
-    sendCommunicationNotification(
-      {
-        uid: sender.uid,
-        id: sender.uid,
-        name: sender.name,
-        email: '',
-        phone: '',
-        role: sender.role as any,
-        status: 'active',
-        createdAt: now
-      },
-      {
-        recipientUserId: receiver.uid,
-        recipientRole: (receiver.role || 'sales') as any,
-        recipientUserName: receiver.name,
-        type: 'message',
-        title: notifTitle,
-        body: trimmedText.length > 120 ? `${trimmedText.slice(0, 117)}...` : trimmedText,
-        priority: 'normal',
-        actionType: 'communication',
-        actionTarget: conversationId,
-        relatedId: messageDocRef.id
-      }
-    ).catch((notifErr) => {
-      console.warn('Background message push dispatch notice:', notifErr);
-    });
-
-    // 4. Audit Log
+    // 3. Audit Log
     try {
       const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       setDoc(doc(db, 'audit_logs', logId), {

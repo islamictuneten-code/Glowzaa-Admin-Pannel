@@ -13,9 +13,6 @@ import { AccessDenied } from './components/auth/AccessDenied';
 import { LocationGateProvider, useLocationGate } from './context/LocationGateContext';
 import { LocationGateScreen } from './components/sales/LocationGateScreen';
 import { LocationLostModal } from './components/sales/LocationLostModal';
-import { NotificationProvider } from './context/NotificationContext';
-import { NotificationToast } from './components/notifications/NotificationToast';
-
 // Admin Components
 import { AdminOverview } from './components/admin/AdminOverview';
 import { AdminFieldTrackingView } from './components/admin/AdminFieldTrackingView';
@@ -26,6 +23,11 @@ import { AdminCustomers } from './components/admin/AdminCustomers';
 import { AdminOrders } from './components/admin/AdminOrders';
 import { AdminPacking } from './components/admin/AdminPacking';
 import { AdminPurchases } from './components/admin/AdminPurchases';
+import { PurchaseOrdersDashboard } from './components/admin/procurement/PurchaseOrdersDashboard';
+import { GoodsReceivingDashboard } from './components/admin/procurement/GoodsReceivingDashboard';
+import { SupplierPerformanceDashboard } from './components/admin/procurement/SupplierPerformanceDashboard';
+import { SupplierPriceIntelligenceDashboard } from './components/admin/procurement/SupplierPriceIntelligenceDashboard';
+import { SmartProcurementDashboard } from './components/admin/procurement/SmartProcurementDashboard';
 import { AdminStaff } from './components/admin/AdminStaff';
 import { AdminPayments } from './components/admin/AdminPayments';
 import { AdminCustomerDue } from './components/admin/AdminCustomerDue';
@@ -37,13 +39,15 @@ import { AdminExpenses } from './components/admin/AdminExpenses';
 import { AdminSettings } from './components/admin/AdminSettings';
 import { AdminWarehouses } from './components/admin/AdminWarehouses';
 import { AdminPayroll } from './components/admin/AdminPayroll';
-import { AdminStaffNotification } from './components/admin/AdminStaffNotification';
 import { AdminMessagesView } from './components/admin/AdminMessagesView';
+import { SalesIntelligenceDashboard } from './components/admin/SalesIntelligenceDashboard';
+import { ExecutiveBIDashboard } from './components/admin/bi/ExecutiveBIDashboard';
+import { CashFlowControlCenter } from './components/admin/cashflow/CashFlowControlCenter';
+import { SalesForecastDashboard } from './components/admin/SalesForecastDashboard';
+import { InventoryIntelligenceDashboard } from './components/admin/InventoryIntelligenceDashboard';
+import { BusinessAlertsActionCenter } from './components/admin/BusinessAlertsActionCenter';
 import { StaffChatInterface } from './components/communication/StaffChatInterface';
-import { VoiceCallGate } from './components/communication/VoiceCallGate';
-import { GroupCallGate } from './components/communication/GroupCallGate';
 import { MySalaryView } from './components/shared/MySalaryView';
-import { requestNotificationPermissionAndRegisterToken } from './services/notificationService';
 
 // Sales Components
 import { SalesOverview } from './components/sales/SalesOverview';
@@ -85,12 +89,17 @@ const DashboardContent: React.FC = () => {
       switch (adminTab) {
         case 'dashboard':
           return <AdminOverview />;
+        case 'executive_bi':
+          return <ExecutiveBIDashboard />;
+        case 'cash_flow_center':
+          return <CashFlowControlCenter />;
+        case 'sales_intelligence':
+          return <SalesIntelligenceDashboard />;
         case 'messages':
+        case 'notifications':
           return <AdminMessagesView />;
         case 'field_tracking':
           return <AdminFieldTrackingView />;
-        case 'notifications':
-          return <AdminStaffNotification />;
         case 'products':
           return <AdminProducts />;
         case 'categories':
@@ -105,6 +114,16 @@ const DashboardContent: React.FC = () => {
           return <AdminPacking />;
         case 'purchases':
           return <AdminPurchases />;
+        case 'purchase_orders':
+          return <PurchaseOrdersDashboard />;
+        case 'goods_receipts':
+          return <GoodsReceivingDashboard />;
+        case 'supplier_performance':
+          return <SupplierPerformanceDashboard />;
+        case 'price_intelligence':
+          return <SupplierPriceIntelligenceDashboard />;
+        case 'smart_procurement':
+          return <SmartProcurementDashboard currentUser={currentUser!} />;
         case 'expenses':
           return <AdminExpenses />;
         case 'payroll':
@@ -129,6 +148,12 @@ const DashboardContent: React.FC = () => {
           return <AdminWarehouses />;
         case 'settings':
           return <AdminSettings />;
+        case 'business_alerts':
+          return <BusinessAlertsActionCenter />;
+        case 'sales_forecast':
+          return <SalesForecastDashboard />;
+        case 'inventory_intelligence':
+          return <InventoryIntelligenceDashboard />;
         default:
           return <AdminOverview />;
       }
@@ -139,6 +164,12 @@ const DashboardContent: React.FC = () => {
       switch (salesTab) {
         case 'dashboard':
           return <SalesOverview />;
+        case 'sales_intelligence':
+          return <SalesIntelligenceDashboard />;
+        case 'sales_forecast':
+          return <SalesForecastDashboard />;
+        case 'business_alerts':
+          return <BusinessAlertsActionCenter />;
         case 'messages':
           return <StaffChatInterface />;
         case 'create_order':
@@ -237,14 +268,7 @@ const MainAppContent: React.FC = () => {
       {/* Real-time Location Lost Modal Overlay */}
       {currentUser?.role === 'sales' && <LocationLostModal />}
 
-      {/* Foreground Notification Toast Layer */}
-      <NotificationToast />
-
-      {/* Voice Call Layer */}
-      <VoiceCallGate />
-      <GroupCallGate />
-
-      {/* Global Modal & Notification Layers */}
+      {/* Global Modals & Toast Layer */}
       <InvoiceModal />
       <CustomerDetailModal />
       <ToastContainer />
@@ -279,11 +303,9 @@ const AuthenticatedApp: React.FC = () => {
 
   return (
     <AppProvider>
-      <NotificationProvider>
-        <LocationGateProvider>
-          <MainAppContent />
-        </LocationGateProvider>
-      </NotificationProvider>
+      <LocationGateProvider>
+        <MainAppContent />
+      </LocationGateProvider>
     </AppProvider>
   );
 };

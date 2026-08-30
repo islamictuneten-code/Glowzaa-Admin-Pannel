@@ -1,32 +1,90 @@
 const fs = require('fs');
+const file = 'src/services/grnService.ts';
+let code = fs.readFileSync(file, 'utf8');
 
-let code = fs.readFileSync('src/services/staffAuthService.ts', 'utf8');
+const target = `
+      // Process items
+      for (const grnItem of grnItems) {
+        if (grnItem.acceptedQuantity > 0) {
+`;
+const replacement = `
+      // Process items
+      for (const grnItem of grnItems) {
+        if (true) {
+`;
+code = code.replace(target, replacement);
 
-code = code.replace(
-  /export async function updateStaffProfile\([\s\S]*?\): Promise<\{ success: boolean; error\?: string \}> \{[\s\S]*?const admin = normalizeAdminUser\(adminUser, adminNameFallback\);\s*const userRef = doc\(db, 'users', userId\);\s*const existingSnap = await getDoc\(userRef\);\s*let existingData: Partial<AuthUser> = \{\};\s*if \(existingSnap\.exists\(\)\) \{\s*existingData = existingSnap\.data\(\) as AuthUser;\s*\}/,
-  `export async function updateStaffProfile(
-  userId: string,
-  updates: UpdateStaffInput,
-  adminUser: AuthUser | { uid: string; name?: string } | string,
-  adminNameFallback?: string,
-  targetLoginId?: string,
-  existingUser?: Partial<AuthUser>
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const admin = normalizeAdminUser(adminUser, adminNameFallback);
-    const userRef = doc(db, 'users', userId);
-    
-    let existingData: Partial<AuthUser> = existingUser || {};
-    if (!existingUser) {
-      try {
-        const existingSnap = await getDoc(userRef);
-        if (existingSnap.exists()) {
-          existingData = existingSnap.data() as AuthUser;
-        }
-      } catch (e) {
-        console.warn('Failed to fetch existing user data:', e);
-      }
-    }`
-);
+const target2 = `
+          // Update Product Stock
+          transaction.update(productRef, {
+            stock: newStock,
+            updatedAt: now
+          });
 
-fs.writeFileSync('src/services/staffAuthService.ts', code);
+          // Create InventoryTransaction
+          const invTransId = doc(collection(db, 'inventory_transactions')).id;
+          const invTrans: InventoryTransaction = {
+            id: invTransId,
+            productId: product.id,
+            productName: product.name,
+            sku: product.sku || '',
+            previousStock,
+            adjustmentQuantity: grnItem.acceptedQuantity,
+            newStock,
+            type: 'stock_in',
+            reason: \`Goods Receipt \${grn.grnNumber}\`,
+            userId: currentUser.uid || currentUser.id,
+            userName: currentUser.name,
+            userRole: currentUser.role,
+            createdAt: now,
+            
+            unitCost: grnItem.unitPurchasePriceBDT,
+            totalCost: grnItem.acceptedValueBDT,
+            purchaseOrderId: po.id,
+            purchaseOrderItemId: poItem.id,
+            goodsReceiptId: grn.id,
+            grnNumber: grn.grnNumber,
+            supplierId: po.supplierId,
+            supplierName: po.supplierName
+          };
+          transaction.set(doc(db, 'inventory_transactions', invTransId), cleanUndefined(invTrans));
+`;
+const replacement2 = `
+          if (grnItem.acceptedQuantity > 0) {
+            // Update Product Stock
+            transaction.update(productRef, {
+              stock: newStock,
+              updatedAt: now
+            });
+
+            // Create InventoryTransaction
+            const invTransId = doc(collection(db, 'inventory_transactions')).id;
+            const invTrans: InventoryTransaction = {
+              id: invTransId,
+              productId: product.id,
+              productName: product.name,
+              sku: product.sku || '',
+              previousStock,
+              adjustmentQuantity: grnItem.acceptedQuantity,
+              newStock,
+              type: 'stock_in',
+              reason: \`Goods Receipt \${grn.grnNumber}\`,
+              userId: currentUser.uid || currentUser.id,
+              userName: currentUser.name,
+              userRole: currentUser.role,
+              createdAt: now,
+              
+              unitCost: grnItem.unitPurchasePriceBDT,
+              totalCost: grnItem.acceptedValueBDT,
+              purchaseOrderId: po.id,
+              purchaseOrderItemId: poItem.id,
+              goodsReceiptId: grn.id,
+              grnNumber: grn.grnNumber,
+              supplierId: po.supplierId,
+              supplierName: po.supplierName
+            };
+            transaction.set(doc(db, 'inventory_transactions', invTransId), cleanUndefined(invTrans));
+          }
+`;
+code = code.replace(target2, replacement2);
+fs.writeFileSync(file, code);

@@ -32,8 +32,11 @@ import {
   ShieldCheck,
   Building2,
   MapPin,
-  BellRing,
-  MessageSquare
+  MessageSquare,
+  Sparkles,
+  ShieldAlert,
+  Award,
+  Wallet
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -93,6 +96,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
 
   const adminNavItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'executive_bi', label: 'Executive BI Dashboard', icon: <BarChart3 className="w-4 h-4 text-teal-600" /> },
+    { id: 'cash_flow_center', label: 'Cash Flow & Financial Control', icon: <Wallet className="w-4 h-4 text-emerald-600" /> },
+    { id: 'sales_intelligence', label: 'Sales & AI Intelligence', icon: <Sparkles className="w-4 h-4 text-amber-500" /> },
     { 
       id: 'messages', 
       label: 'Staff Messages', 
@@ -100,7 +106,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
       badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined, 
       badgeColor: 'bg-[#087F7A] text-white animate-pulse' 
     },
-    { id: 'notifications', label: 'Push Notifications', icon: <BellRing className="w-4 h-4 text-rose-600" /> },
     { id: 'field_tracking', label: 'Field Sales Tracking', icon: <MapPin className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'products', label: 'Products', icon: <Package className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <Layers className="w-4 h-4" /> },
@@ -109,6 +114,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'orders', label: 'Orders', icon: <ShoppingCart className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
     { id: 'packing', label: 'Packing / Warehouse', icon: <Boxes className="w-4 h-4" />, badge: packingOrdersCount > 0 ? packingOrdersCount : undefined, badgeColor: 'bg-teal-100 text-teal-800' },
     { id: 'purchases', label: 'Purchase / Stock In', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'purchase_orders', label: 'Purchase Orders', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'goods_receipts', label: 'Goods Receiving', icon: <Truck className="w-4 h-4" /> },
+    { id: 'supplier_performance', label: 'Supplier Performance', icon: <Award className="w-4 h-4 text-[#0F766E]" /> },
+    { id: 'price_intelligence', label: 'Price Intelligence', icon: <TrendingUp className="w-4 h-4 text-[#0F766E]" /> },
+    { id: 'smart_procurement', label: 'Smart Procurement', icon: <Sparkles className="w-4 h-4 text-[#0F766E]" /> },
     { id: 'expenses', label: 'Operating Expenses', icon: <Banknote className="w-4 h-4" />, badge: pendingExpensesCount > 0 ? pendingExpensesCount : undefined, badgeColor: 'bg-amber-100 text-amber-800' },
     { id: 'payroll', label: 'Staff HR & Payroll', icon: <Calculator className="w-4 h-4 text-[#087F7A]" /> },
     { id: 'staff_management', label: 'Staff / User Accounts', icon: <ShieldCheck className="w-4 h-4 text-[#087F7A]" /> },
@@ -121,11 +131,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'inventory_reports', label: 'Inventory Reports', icon: <FileSpreadsheet className="w-4 h-4" /> },
     { id: 'profit_loss', label: 'Profit & Loss', icon: <Calculator className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
+    { id: 'sales_forecast', label: 'Sales Forecast & Trends', icon: <TrendingUp className="w-4 h-4 text-emerald-600" /> },
+    { id: 'inventory_intelligence', label: 'Inventory Intelligence', icon: <Boxes className="w-4 h-4 text-[#0F766E]" /> },
+    { id: 'business_alerts', label: 'Business Alerts', icon: <ShieldAlert className="w-4 h-4 text-rose-500" /> },
     { id: 'warehouses', label: 'Warehouse Management', icon: <Building2 className="w-4 h-4" /> },
   ];
 
   const salesNavItems: { id: SalesTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'sales_intelligence', label: 'Sales Intelligence', icon: <Sparkles className="w-4 h-4 text-amber-500" /> },
+    { id: 'sales_forecast', label: 'Sales Forecast', icon: <TrendingUp className="w-4 h-4 text-emerald-600" /> },
+    { id: 'business_alerts', label: 'Business Alerts', icon: <ShieldAlert className="w-4 h-4 text-rose-500" /> },
     { 
       id: 'messages', 
       label: 'HQ Direct Chat', 

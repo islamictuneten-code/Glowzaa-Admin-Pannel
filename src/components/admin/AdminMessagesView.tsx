@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthUser } from '../../types';
 import { fetchStaffUsersFromFirestore } from '../../services/staffAuthService';
-import { AdminCommunicationCenter } from './AdminCommunicationCenter';
+import { AdminMessagingCenter } from '../communication/AdminMessagingCenter';
 
 export const AdminMessagesView: React.FC = () => {
   const [staffList, setStaffList] = useState<AuthUser[]>([]);
@@ -26,5 +26,5 @@ export const AdminMessagesView: React.FC = () => {
     return () => { isMounted = false; };
   }, []);
 
-  return <AdminCommunicationCenter staffUsers={staffList} defaultTab="messages" />;
+  return <AdminMessagingCenter staffUsers={staffList} />;
 };

@@ -14,7 +14,6 @@ import {
   subscribeToCommunicationConversations, 
   getOrCreateCommunicationConversation 
 } from '../../services/communicationService';
-import { subscribeCommunicationDevices } from '../../services/notificationService';
 import { ConversationList } from './ConversationList';
 import { ConversationView } from './ConversationView';
 import { StaffChatInterface } from './StaffChatInterface';
@@ -48,13 +47,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       setConversations(list);
     });
 
-    const unsubDev = subscribeCommunicationDevices((devs) => {
-      setDevices(devs);
-    });
-
     return () => {
       unsubConv();
-      unsubDev();
     };
   }, [isOpen, currentUserId, role]);
 

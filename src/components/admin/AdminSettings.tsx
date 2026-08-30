@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { getStoredForecastingSettings, saveForecastingSettings } from '../../services/salesForecastService';
 import { 
   Settings, 
   Building2, 
@@ -37,10 +38,10 @@ import {
   Radio,
   FileText,
   SmartphoneNfc,
-  Check
+  Check,
+  TrendingUp
 } from 'lucide-react';
 import { SystemAuditReport } from './SystemAuditReport';
-import { displaySystemNotification, playNotificationSound } from '../../services/notificationService';
 import { collection, getDocs, query, orderBy, limit, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
@@ -106,6 +107,15 @@ export const AdminSettings: React.FC = () => {
   const [gpsInterval, setGpsInterval] = useState('3 minutes');
   const [minMovement, setMinMovement] = useState('200 meters');
   const [gpsAccuracy, setGpsAccuracy] = useState('100 meters');
+
+  // Forecasting & Reorder Settings state
+  const [forecastCfg, setForecastCfg] = useState(() => getStoredForecastingSettings());
+  const handleSaveForecastCfg = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveForecastingSettings(forecastCfg);
+    addToast({ type: 'success', title: 'Settings Saved', message: 'Forecasting & Reorder parameters updated successfully.' });
+    setActivePanel(null);
+  };
 
   // Theme customization & new theme creation state
   const [activeThemePreset, setActiveThemePreset] = useState<string>(() => localStorage.getItem('glowzaa_active_theme') || 'theme2');
@@ -189,8 +199,7 @@ export const AdminSettings: React.FC = () => {
       setBrowserPermission(res);
       if (res === 'granted') {
         setPushEnabled(true);
-        addToast({ type: 'success', title: 'Notifications Enabled', message: 'System push notifications successfully activated.' });
-        displaySystemNotification('Glowzaa Push Active', { body: 'You are now ready to receive operational alerts.', priority: 'normal' });
+        addToast({ type: 'success', title: 'Notifications Enabled', message: 'System alert preferences successfully updated.' });
       } else {
         addToast({ type: 'warning', title: 'Permission Denied', message: 'Notification permission was denied by browser settings.' });
       }
@@ -240,9 +249,6 @@ export const AdminSettings: React.FC = () => {
         status: 'Sent'
       };
       await setDoc(doc(collection(db, 'staff_notifications')), notifData);
-      
-      // Also trigger local push banner for admin
-      await displaySystemNotification(commTitle, { body: commMessage, priority: commPriority, actionUrl: commActionUrl });
 
       addToast({ type: 'success', title: 'Notification Sent', message: `Successfully broadcasted to ${commRecipientRole.toUpperCase()} staff.` });
       setCommTitle('');
@@ -355,7 +361,8 @@ export const AdminSettings: React.FC = () => {
       id: 'inventory',
       title: 'E. Inventory & Warehouse',
       cards: [
-        { id: 'inventory_cfg', title: 'Inventory Settings', desc: 'Low stock thresholds, warehouse assignments, and alerts.', badge: `${products.length} Products`, icon: Sliders, panel: 'inventory_cfg' }
+        { id: 'inventory_cfg', title: 'Inventory Settings', desc: 'Low stock thresholds, warehouse assignments, and alerts.', badge: `${products.length} Products`, icon: Sliders, panel: 'inventory_cfg' },
+        { id: 'forecasting_cfg', title: 'Forecasting & Reorder', desc: 'Configure sales forecast horizon, minimum history days, safety stock, and reorder planning.', badge: 'Configured', icon: TrendingUp, panel: 'forecasting_cfg' }
       ]
     },
     {
@@ -1559,6 +1566,106 @@ export const AdminSettings: React.FC = () => {
                 {isLoggingOutAll ? 'Logging Out...' : 'Yes, Log Out All Devices'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FORECASTING & REORDER SETTINGS MODAL */}
+      {activePanel === 'forecasting_cfg' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-[#0F766E]">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Forecasting & Reorder Parameters</h3>
+                  <p className="text-xs text-slate-500">Configure statistical rules and safety stock thresholds.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setActivePanel(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveForecastCfg} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Forecast Horizon Days</label>
+                <select
+                  value={forecastCfg.forecastHorizonDays}
+                  onChange={e => setForecastCfg({ ...forecastCfg, forecastHorizonDays: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20"
+                >
+                  <option value={7}>7 Days (Short-term)</option>
+                  <option value={14}>14 Days (Bi-weekly)</option>
+                  <option value={30}>30 Days (Monthly standard)</option>
+                  <option value={60}>60 Days (Quarterly horizon)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Min History Days for Reliable Forecast</label>
+                <input
+                  type="number"
+                  value={forecastCfg.minHistoryDays}
+                  onChange={e => setForecastCfg({ ...forecastCfg, minHistoryDays: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20"
+                  min={1}
+                  max={30}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Sales Decline Threshold (%)</label>
+                <input
+                  type="number"
+                  value={forecastCfg.salesDeclineThreshold}
+                  onChange={e => setForecastCfg({ ...forecastCfg, salesDeclineThreshold: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20"
+                  max={0}
+                />
+                <span className="text-[11px] text-slate-400 mt-0.5 block">e.g. -20% indicates significant downward trend.</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Default Safety Stock (Units)</label>
+                <input
+                  type="number"
+                  value={forecastCfg.defaultSafetyStockUnits}
+                  onChange={e => setForecastCfg({ ...forecastCfg, defaultSafetyStockUnits: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20"
+                  min={0}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Default Supplier Lead Time (Days)</label>
+                <input
+                  type="number"
+                  value={forecastCfg.defaultLeadTimeDays}
+                  onChange={e => setForecastCfg({ ...forecastCfg, defaultLeadTimeDays: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20"
+                  min={1}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActivePanel(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-[#0F766E] hover:bg-[#0D625C] text-white font-bold text-xs shadow-xs transition-colors"
+                >
+                  Save Parameters
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

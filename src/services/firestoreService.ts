@@ -46,7 +46,15 @@ import {
   GpsLocationPing,
   CustomerVisit,
   FieldDutyStatus,
-  CustomerVisitOutcome
+  CustomerVisitOutcome,
+  CustomerNote,
+  CreditCheckMode,
+  Supplier,
+  SupplierProduct,
+  PurchaseRequest,
+  PurchaseRequestItem,
+  SupplierStatus,
+  PurchaseRequestStatus
 } from '../types';
 
 export enum OperationType {
@@ -1381,6 +1389,212 @@ export async function deleteCustomerFromFirestore(
   }
 }
 
+/**
+ * Updates Customer Smart Credit Control settings (Credit Limit, Credit Mode, Credit Hold, Review Date, Notes).
+ * Strictly audited and restricted to Admin personnel.
+ */
+export async function updateCustomerCreditControlInFirestore(
+  customerId: string,
+  creditSettings: {
+    creditLimit: number;
+    creditCheckMode: CreditCheckMode;
+    creditHold: boolean;
+    creditHoldReason?: string;
+    creditReviewDate?: string;
+    creditNote?: string;
+  },
+  previousCustomer: Customer,
+  currentUser: AuthUser
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!customerId) return { success: false, error: 'Customer ID is required.' };
+    if (currentUser.role !== 'admin') {
+      return { success: false, error: 'Unauthorized: Only Admin can configure customer credit terms.' };
+    }
+
+    const custDocRef = doc(db, 'customers', customerId);
+    const now = new Date().toISOString();
+
+    const updatePayload: Partial<Customer> = {
+      creditLimit: Math.max(0, Number(creditSettings.creditLimit) || 0),
+      creditCheckMode: creditSettings.creditCheckMode || 'NONE',
+      creditHold: Boolean(creditSettings.creditHold),
+      creditHoldReason: creditSettings.creditHold ? (creditSettings.creditHoldReason || '').trim() : '',
+      creditReviewDate: creditSettings.creditReviewDate || '',
+      creditNote: (creditSettings.creditNote || '').trim(),
+      updatedAt: now
+    };
+
+    await updateDoc(custDocRef, cleanUndefined(updatePayload));
+
+    // Determine audit changes
+    const auditLogsToCreate = [];
+    const prevLimit = Number(previousCustomer.creditLimit) || 0;
+    const newLimit = updatePayload.creditLimit!;
+    const prevMode = previousCustomer.creditCheckMode || 'NONE';
+    const newMode = updatePayload.creditCheckMode!;
+    const prevHold = Boolean(previousCustomer.creditHold);
+    const newHold = updatePayload.creditHold!;
+
+    if (prevLimit !== newLimit) {
+      auditLogsToCreate.push({
+        action: 'CREDIT_LIMIT_CHANGED',
+        details: `Credit limit updated from ৳${prevLimit.toLocaleString()} to ৳${newLimit.toLocaleString()}`,
+        previousCreditLimit: prevLimit,
+        newCreditLimit: newLimit
+      });
+    }
+
+    if (prevMode !== newMode) {
+      auditLogsToCreate.push({
+        action: 'CREDIT_MODE_CHANGED',
+        details: `Credit check enforcement mode changed from ${prevMode} to ${newMode}`
+      });
+    }
+
+    if (prevHold !== newHold) {
+      auditLogsToCreate.push({
+        action: newHold ? 'CREDIT_HOLD_ENABLED' : 'CREDIT_HOLD_REMOVED',
+        details: newHold 
+          ? `Credit hold activated: ${updatePayload.creditHoldReason || 'No reason specified'}` 
+          : 'Credit hold removed by Admin',
+        reason: updatePayload.creditHoldReason || ''
+      });
+    }
+
+    // Write audit records
+    for (const logItem of auditLogsToCreate) {
+      const auditCol = collection(db, 'audit_logs');
+      const auditDocRef = doc(auditCol);
+      await setDoc(auditDocRef, cleanUndefined({
+        id: auditDocRef.id,
+        action: logItem.action,
+        targetUserId: customerId,
+        targetUserName: previousCustomer.shopName,
+        targetRole: 'customer',
+        performedByUserId: currentUser.uid,
+        performedByUserName: currentUser.name || 'Admin',
+        details: logItem.details,
+        reason: (logItem as any).reason || '',
+        previousCreditLimit: (logItem as any).previousCreditLimit ?? null,
+        newCreditLimit: (logItem as any).newCreditLimit ?? null,
+        currentDue: previousCustomer.currentDue || 0,
+        timestamp: now,
+        createdAt: now
+      }));
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating customer credit control in Firestore:', err);
+    return { success: false, error: err.message || 'Failed to update credit control settings.' };
+  }
+}
+
+// ==========================================
+// CUSTOMER INTERNAL NOTES SERVICE
+// ==========================================
+
+export function subscribeCustomerNotes(
+  customerId: string,
+  onUpdate: (notes: CustomerNote[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  if (!customerId) {
+    onUpdate([]);
+    return () => {};
+  }
+  const notesRef = collection(db, 'customer_notes');
+  const q = query(notesRef, where('customerId', '==', customerId), orderBy('createdAt', 'desc'), limit(100));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CustomerNote[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as CustomerNote);
+      });
+      onUpdate(list);
+    },
+    (err) => {
+      // Fallback query without orderBy if index is still building
+      console.warn('Customer notes indexed query notice, attempting un-indexed fallback:', err);
+      const fallbackQuery = query(notesRef, where('customerId', '==', customerId), limit(100));
+      return onSnapshot(
+        fallbackQuery,
+        (snapshot) => {
+          const list: CustomerNote[] = [];
+          snapshot.forEach((d) => {
+            list.push({ id: d.id, ...d.data() } as CustomerNote);
+          });
+          list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+          onUpdate(list);
+        },
+        onError
+      );
+    }
+  );
+}
+
+export async function createCustomerNoteInFirestore(
+  data: {
+    customerId: string;
+    note: string;
+  },
+  currentUser: AuthUser
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    if (!data.customerId) return { success: false, error: 'Customer ID is required.' };
+    if (!data.note?.trim()) return { success: false, error: 'Note text cannot be blank.' };
+
+    const notesCol = collection(db, 'customer_notes');
+    const newDocRef = doc(notesCol);
+    const now = new Date().toISOString();
+
+    const noteDoc: CustomerNote = {
+      id: newDocRef.id,
+      noteId: newDocRef.id,
+      customerId: data.customerId,
+      note: data.note.trim(),
+      createdBy: currentUser.uid,
+      createdByName: currentUser.name || 'Staff User',
+      createdByRole: currentUser.role,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await setDoc(newDocRef, cleanUndefined(noteDoc));
+    return { success: true, id: newDocRef.id };
+  } catch (err: any) {
+    console.error('Error creating customer note:', err);
+    return { success: false, error: err.message || 'Failed to save customer note.' };
+  }
+}
+
+export async function deleteCustomerNoteInFirestore(
+  noteId: string,
+  currentUser: AuthUser
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!noteId) return { success: false, error: 'Note ID is required.' };
+    const noteDocRef = doc(db, 'customer_notes', noteId);
+    const noteSnap = await getDoc(noteDocRef);
+    if (!noteSnap.exists()) {
+      return { success: false, error: 'Note not found.' };
+    }
+    const noteData = noteSnap.data() as CustomerNote;
+    if (currentUser.role !== 'admin' && noteData.createdBy !== currentUser.uid) {
+      return { success: false, error: 'Permission denied: You can only delete your own notes.' };
+    }
+
+    await deleteDoc(noteDocRef);
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting customer note:', err);
+    return { success: false, error: err.message || 'Failed to delete note.' };
+  }
+}
+
 // ==========================================
 // ORDERS FIRESTORE MANAGEMENT & STOCK RULES
 // ==========================================
@@ -1738,6 +1952,15 @@ export async function createOrderInFirestore(
     notes?: string;
     paymentMethod?: string;
     orderStatus?: OrderStatus;
+    adminOverride?: {
+      reason: string;
+      approvedByUserId: string;
+      approvedByUserName: string;
+      excessAmount: number;
+      projectedDue: number;
+      creditLimit: number;
+      currentDue: number;
+    };
   },
   currentUser: AuthUser
 ): Promise<{ success: boolean; id?: string; orderNumber?: string; error?: string }> {
@@ -1856,6 +2079,36 @@ export async function createOrderInFirestore(
     };
 
     await setDoc(newDocRef, cleanUndefined(newOrderDoc));
+
+    // If order was created with Admin Credit Override, record audit trail
+    if (orderData.adminOverride) {
+      try {
+        const auditCol = collection(db, 'audit_logs');
+        const auditDocRef = doc(auditCol);
+        await setDoc(auditDocRef, cleanUndefined({
+          id: auditDocRef.id,
+          action: 'CREDIT_OVERRIDE',
+          targetUserId: orderData.customerId,
+          targetUserName: orderData.shopName,
+          targetRole: 'customer',
+          orderId: newDocRef.id,
+          orderNumber,
+          performedByUserId: orderData.adminOverride.approvedByUserId,
+          performedByUserName: orderData.adminOverride.approvedByUserName,
+          reason: orderData.adminOverride.reason,
+          previousCreditLimit: orderData.adminOverride.creditLimit,
+          currentDue: orderData.adminOverride.currentDue,
+          projectedDue: orderData.adminOverride.projectedDue,
+          excessAmount: orderData.adminOverride.excessAmount,
+          details: `Admin credit limit override by ${orderData.adminOverride.approvedByUserName}. Order #${orderNumber} (৳${grandTotal.toLocaleString()}). Reason: ${orderData.adminOverride.reason}`,
+          timestamp: isoNow,
+          createdAt: isoNow
+        }));
+      } catch (auditErr) {
+        console.warn('Could not write credit override audit log:', auditErr);
+      }
+    }
+
     return { success: true, id: newDocRef.id, orderNumber };
   } catch (err: any) {
     console.error('Error creating order in Firestore:', err);
@@ -6050,3 +6303,557 @@ export {
   getUnreadCommunicationMessageCount
 } from './communicationService';
 
+// ============================================================================
+// STEP 17.1 — SMART PURCHASE & SUPPLIER MANAGEMENT FOUNDATION
+// ============================================================================
+
+export async function recordProcurementAuditLog(
+  action: string,
+  targetId: string,
+  targetName: string,
+  currentUser: AuthUser,
+  details?: string
+) {
+  try {
+    await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+      action,
+      targetUserId: targetId,
+      targetUserName: targetName,
+      targetRole: currentUser.role || 'admin',
+      performedByUserId: currentUser.uid || currentUser.id || '',
+      performedByUserName: currentUser.name || '',
+      timestamp: new Date().toISOString(),
+      details: details || ''
+    }));
+  } catch (err) {
+    console.error('Failed to record procurement audit log:', err);
+  }
+}
+
+export async function createSupplier(
+  supplierData: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt' | 'totalPurchaseAmountBDT' | 'totalPurchaseOrders'>,
+  currentUser: AuthUser
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    if (!supplierData.name || !supplierData.name.trim()) return { success: false, error: 'Supplier name is required.' };
+    if (!supplierData.supplierCode || !supplierData.supplierCode.trim()) return { success: false, error: 'Supplier code is required.' };
+    if (supplierData.defaultLeadTimeDays !== undefined && supplierData.defaultLeadTimeDays < 0) {
+      return { success: false, error: 'Lead time cannot be negative.' };
+    }
+    if (supplierData.minimumOrderValue !== undefined && supplierData.minimumOrderValue < 0) {
+      return { success: false, error: 'Minimum order value cannot be negative.' };
+    }
+
+    const suppliersRef = collection(db, 'suppliers');
+    const codeQuery = query(suppliersRef, where('supplierCode', '==', supplierData.supplierCode.trim().toUpperCase()));
+    const codeSnap = await getDocs(codeQuery);
+    if (!codeSnap.empty) {
+      return { success: false, error: 'Supplier code already exists.' };
+    }
+
+    const now = new Date().toISOString();
+    const newDocRef = doc(collection(db, 'suppliers'));
+    const payload = cleanUndefined({
+      id: newDocRef.id,
+      supplierCode: supplierData.supplierCode.trim().toUpperCase(),
+      name: supplierData.name.trim(),
+      companyName: supplierData.companyName || '',
+      phone: supplierData.phone || '',
+      alternatePhone: supplierData.alternatePhone || '',
+      email: supplierData.email || '',
+      address: supplierData.address || '',
+      city: supplierData.city || '',
+      district: supplierData.district || '',
+      contactPerson: supplierData.contactPerson || '',
+      status: supplierData.status || 'active',
+      paymentTerms: supplierData.paymentTerms || 'Net 30',
+      currency: supplierData.currency || 'BDT',
+      defaultLeadTimeDays: Number(supplierData.defaultLeadTimeDays) || 7,
+      minimumOrderValue: Number(supplierData.minimumOrderValue) || 0,
+      notes: supplierData.notes || '',
+      totalPurchaseAmountBDT: 0,
+      totalPurchaseOrders: 0,
+      lastPurchaseAt: null,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: currentUser.uid || currentUser.id || ''
+    });
+
+    await setDoc(newDocRef, payload);
+    await recordProcurementAuditLog('SUPPLIER_CREATED', newDocRef.id, supplierData.name, currentUser, `Created supplier ${supplierData.supplierCode}`);
+    return { success: true, id: newDocRef.id };
+  } catch (err: any) {
+    console.error('Error creating supplier:', err);
+    return { success: false, error: err?.message || 'Failed to create supplier.' };
+  }
+}
+
+export async function updateSupplier(
+  supplierId: string,
+  updates: Partial<Supplier>,
+  currentUser: AuthUser
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    if (!supplierId) return { success: false, error: 'Supplier ID required.' };
+
+    const docRef = doc(db, 'suppliers', supplierId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return { success: false, error: 'Supplier not found.' };
+
+    const existing = snap.data() as Supplier;
+    const isAdmin = currentUser.role === 'admin';
+
+    if (!isAdmin) {
+      if (updates.supplierCode && updates.supplierCode !== existing.supplierCode) {
+        return { success: false, error: 'Only admin can change supplier code.' };
+      }
+    }
+
+    if (updates.defaultLeadTimeDays !== undefined && updates.defaultLeadTimeDays < 0) {
+      return { success: false, error: 'Lead time cannot be negative.' };
+    }
+    if (updates.minimumOrderValue !== undefined && updates.minimumOrderValue < 0) {
+      return { success: false, error: 'Minimum order value cannot be negative.' };
+    }
+
+    const payload = cleanUndefined({
+      ...updates,
+      id: supplierId,
+      supplierCode: isAdmin && updates.supplierCode ? updates.supplierCode.toUpperCase() : existing.supplierCode,
+      createdAt: existing.createdAt,
+      createdBy: existing.createdBy,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser.uid || currentUser.id || ''
+    });
+
+    await updateDoc(docRef, payload);
+    await recordProcurementAuditLog('SUPPLIER_UPDATED', supplierId, existing.name, currentUser, 'Updated supplier details');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating supplier:', err);
+    return { success: false, error: err?.message || 'Failed to update supplier.' };
+  }
+}
+
+export async function getSupplier(supplierId: string): Promise<Supplier | null> {
+  try {
+    const snap = await getDoc(doc(db, 'suppliers', supplierId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...(snap.data() as any) } as Supplier;
+  } catch (err) {
+    console.error('Error getting supplier:', err);
+    return null;
+  }
+}
+
+export async function getSuppliers(): Promise<Supplier[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'suppliers'), orderBy('createdAt', 'desc')));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Supplier));
+  } catch (err) {
+    console.warn('Error fetching suppliers with orderBy, falling back:', err);
+    try {
+      const snap = await getDocs(collection(db, 'suppliers'));
+      return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Supplier));
+    } catch (fallbackErr) {
+      console.error('Error fetching suppliers:', fallbackErr);
+      return [];
+    }
+  }
+}
+
+export async function deactivateSupplier(supplierId: string, currentUser: AuthUser): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    const docRef = doc(db, 'suppliers', supplierId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return { success: false, error: 'Supplier not found.' };
+
+    await updateDoc(docRef, {
+      status: 'inactive',
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser.uid || currentUser.id || ''
+    });
+
+    await recordProcurementAuditLog('SUPPLIER_DEACTIVATED', supplierId, snap.data().name || '', currentUser, 'Deactivated supplier');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deactivating supplier:', err);
+    return { success: false, error: err?.message || 'Failed to deactivate supplier.' };
+  }
+}
+
+export async function createSupplierProduct(
+  data: Omit<SupplierProduct, 'id' | 'createdAt' | 'updatedAt'>,
+  currentUser: AuthUser
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    if (!data.supplierId) return { success: false, error: 'Supplier ID is required.' };
+    if (!data.productId) return { success: false, error: 'Product ID is required.' };
+    if (data.purchasePrice < 0) return { success: false, error: 'Purchase price cannot be negative.' };
+    if (data.minimumOrderQuantity !== undefined && data.minimumOrderQuantity < 0) {
+      return { success: false, error: 'Minimum order quantity cannot be negative.' };
+    }
+    if (data.leadTimeDays !== undefined && data.leadTimeDays < 0) {
+      return { success: false, error: 'Lead time cannot be negative.' };
+    }
+
+    const supplierDoc = await getDoc(doc(db, 'suppliers', data.supplierId));
+    if (!supplierDoc.exists()) return { success: false, error: 'Assigned supplier does not exist.' };
+
+    const productDoc = await getDoc(doc(db, 'products', data.productId));
+    if (!productDoc.exists()) return { success: false, error: 'Assigned product does not exist.' };
+
+    const spCol = collection(db, 'supplier_products');
+    const dupQuery = query(
+      spCol,
+      where('supplierId', '==', data.supplierId),
+      where('productId', '==', data.productId),
+      where('isActive', '==', true)
+    );
+    const dupSnap = await getDocs(dupQuery);
+    if (!dupSnap.empty) {
+      return { success: false, error: 'An active supplier-product mapping already exists for this supplier and product.' };
+    }
+
+    const now = new Date().toISOString();
+    const newDocRef = doc(collection(db, 'supplier_products'));
+    const payload = cleanUndefined({
+      id: newDocRef.id,
+      supplierId: data.supplierId,
+      productId: data.productId,
+      supplierName: supplierDoc.data().name || '',
+      productName: productDoc.data().name || '',
+      supplierSku: data.supplierSku || '',
+      purchasePrice: Number(data.purchasePrice) || 0,
+      currency: data.currency || 'BDT',
+      minimumOrderQuantity: Number(data.minimumOrderQuantity) || 1,
+      leadTimeDays: Number(data.leadTimeDays) || Number(supplierDoc.data().defaultLeadTimeDays) || 7,
+      isPreferredSupplier: Boolean(data.isPreferredSupplier),
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      lastPurchasePrice: data.lastPurchasePrice || null,
+      lastPurchaseAt: data.lastPurchaseAt || null,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await setDoc(newDocRef, payload);
+    await recordProcurementAuditLog('SUPPLIER_PRODUCT_CREATED', newDocRef.id, `${supplierDoc.data().name} - ${productDoc.data().name}`, currentUser, 'Created supplier product mapping');
+    return { success: true, id: newDocRef.id };
+  } catch (err: any) {
+    console.error('Error creating supplier product:', err);
+    return { success: false, error: err?.message || 'Failed to create supplier product mapping.' };
+  }
+}
+
+export async function updateSupplierProduct(
+  supplierProductId: string,
+  updates: Partial<SupplierProduct>,
+  currentUser: AuthUser
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    const docRef = doc(db, 'supplier_products', supplierProductId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return { success: false, error: 'Supplier product mapping not found.' };
+
+    if (updates.purchasePrice !== undefined && updates.purchasePrice < 0) {
+      return { success: false, error: 'Purchase price cannot be negative.' };
+    }
+
+    const payload = cleanUndefined({
+      ...updates,
+      id: supplierProductId,
+      updatedAt: new Date().toISOString()
+    });
+
+    await updateDoc(docRef, payload);
+    await recordProcurementAuditLog('SUPPLIER_PRODUCT_UPDATED', supplierProductId, snap.data().productName || '', currentUser, 'Updated supplier product mapping');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating supplier product:', err);
+    return { success: false, error: err?.message || 'Failed to update supplier product mapping.' };
+  }
+}
+
+export async function getSupplierProducts(supplierId?: string): Promise<SupplierProduct[]> {
+  try {
+    const spCol = collection(db, 'supplier_products');
+    let q;
+    if (supplierId) {
+      q = query(spCol, where('supplierId', '==', supplierId));
+    } else {
+      q = query(spCol);
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as SupplierProduct));
+  } catch (err) {
+    console.error('Error getting supplier products:', err);
+    return [];
+  }
+}
+
+export async function getSuppliersForProduct(productId: string): Promise<SupplierProduct[]> {
+  try {
+    const spCol = collection(db, 'supplier_products');
+    const q = query(spCol, where('productId', '==', productId), where('isActive', '==', true));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as SupplierProduct));
+  } catch (err) {
+    console.error('Error getting suppliers for product:', err);
+    return [];
+  }
+}
+
+export async function createPurchaseRequest(
+  requestData: Omit<PurchaseRequest, 'id' | 'requestNumber' | 'requestedByUserId' | 'requestedByUserName' | 'status' | 'createdAt' | 'updatedAt' | 'totalEstimatedAmountBDT'>,
+  items: Omit<PurchaseRequestItem, 'id' | 'purchaseRequestId' | 'createdAt'>[],
+  currentUser: AuthUser
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    if (!items || items.length === 0) return { success: false, error: 'Purchase request must contain at least one item.' };
+
+    for (const item of items) {
+      if (!item.productId) return { success: false, error: 'Item product ID is required.' };
+      if (!item.requestedQuantity || item.requestedQuantity <= 0) {
+        return { success: false, error: 'Requested quantity must be greater than 0.' };
+      }
+      if (item.estimatedUnitPrice === undefined || item.estimatedUnitPrice < 0) {
+        return { success: false, error: 'Estimated unit price cannot be negative.' };
+      }
+      const prodSnap = await getDoc(doc(db, 'products', item.productId));
+      if (!prodSnap.exists()) {
+        return { success: false, error: `Product ID ${item.productId} does not exist.` };
+      }
+    }
+
+    if (requestData.supplierId) {
+      const supSnap = await getDoc(doc(db, 'suppliers', requestData.supplierId));
+      if (!supSnap.exists()) {
+        return { success: false, error: 'Assigned supplier does not exist.' };
+      }
+    }
+
+    const totalEstimatedAmountBDT = items.reduce((sum, item) => sum + (item.requestedQuantity * item.estimatedUnitPrice), 0);
+    const requestNumber = `PR-${Date.now().toString().slice(-6)}`;
+    const now = new Date().toISOString();
+
+    const prRef = doc(collection(db, 'purchase_requests'));
+    const batch = writeBatch(db);
+
+    batch.set(prRef, cleanUndefined({
+      id: prRef.id,
+      requestNumber,
+      requestedByUserId: currentUser.uid || currentUser.id || '',
+      requestedByUserName: currentUser.name || 'Staff',
+      supplierId: requestData.supplierId || null,
+      supplierName: requestData.supplierName || null,
+      status: 'draft',
+      reason: requestData.reason || '',
+      totalEstimatedAmountBDT,
+      createdAt: now,
+      updatedAt: now,
+      approvedAt: null,
+      approvedByUserId: null,
+      approvedByUserName: null,
+      rejectedAt: null,
+      rejectedByUserId: null,
+      rejectionReason: null
+    }));
+
+    for (const item of items) {
+      const itemRef = doc(collection(db, 'purchase_request_items'));
+      batch.set(itemRef, cleanUndefined({
+        id: itemRef.id,
+        purchaseRequestId: prRef.id,
+        productId: item.productId,
+        productName: item.productName,
+        requestedQuantity: item.requestedQuantity,
+        estimatedUnitPrice: item.estimatedUnitPrice,
+        estimatedTotalPrice: item.requestedQuantity * item.estimatedUnitPrice,
+        currentStock: item.currentStock !== undefined ? item.currentStock : null,
+        recommendedQuantity: item.recommendedQuantity !== undefined ? item.recommendedQuantity : null,
+        createdAt: now
+      }));
+    }
+
+    await batch.commit();
+    await recordProcurementAuditLog('PURCHASE_REQUEST_CREATED', prRef.id, requestNumber, currentUser, 'Created purchase request draft');
+    return { success: true, id: prRef.id };
+  } catch (err: any) {
+    console.error('Error creating purchase request:', err);
+    return { success: false, error: err?.message || 'Failed to create purchase request.' };
+  }
+}
+
+export async function updatePurchaseRequest(
+  requestId: string,
+  updates: Partial<PurchaseRequest>,
+  items?: Omit<PurchaseRequestItem, 'id' | 'purchaseRequestId' | 'createdAt'>[],
+  currentUser?: AuthUser
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    const prRef = doc(db, 'purchase_requests', requestId);
+    const snap = await getDoc(prRef);
+    if (!snap.exists()) return { success: false, error: 'Purchase request not found.' };
+
+    const existing = snap.data() as PurchaseRequest;
+    const isSales = currentUser.role === 'sales';
+
+    if (isSales && existing.status !== 'draft') {
+      return { success: false, error: 'Cannot modify purchase request after it has been submitted/processed.' };
+    }
+
+    const payload = cleanUndefined({
+      ...updates,
+      id: requestId,
+      requestNumber: existing.requestNumber,
+      requestedByUserId: existing.requestedByUserId,
+      requestedByUserName: existing.requestedByUserName,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString()
+    });
+
+    await updateDoc(prRef, payload);
+    await recordProcurementAuditLog('PURCHASE_REQUEST_UPDATED', requestId, existing.requestNumber, currentUser, 'Updated purchase request');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating purchase request:', err);
+    return { success: false, error: err?.message || 'Failed to update purchase request.' };
+  }
+}
+
+export async function getPurchaseRequest(requestId: string): Promise<{ request: PurchaseRequest; items: PurchaseRequestItem[] } | null> {
+  try {
+    const prSnap = await getDoc(doc(db, 'purchase_requests', requestId));
+    if (!prSnap.exists()) return null;
+
+    const request = { id: prSnap.id, ...(prSnap.data() as any) } as PurchaseRequest;
+    const itemsSnap = await getDocs(query(collection(db, 'purchase_request_items'), where('purchaseRequestId', '==', requestId)));
+    const items = itemsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as PurchaseRequestItem));
+
+    return { request, items };
+  } catch (err) {
+    console.error('Error getting purchase request:', err);
+    return null;
+  }
+}
+
+export async function getPurchaseRequests(): Promise<PurchaseRequest[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'purchase_requests'), orderBy('createdAt', 'desc')));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as PurchaseRequest));
+  } catch (err) {
+    console.warn('Error fetching purchase requests with orderBy, falling back:', err);
+    try {
+      const snap = await getDocs(collection(db, 'purchase_requests'));
+      return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as PurchaseRequest));
+    } catch (fallbackErr) {
+      console.error('Error fetching purchase requests:', fallbackErr);
+      return [];
+    }
+  }
+}
+
+export async function approvePurchaseRequest(requestId: string, currentUser: AuthUser): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    if (currentUser.role !== 'admin') return { success: false, error: 'Only admin can approve purchase requests.' };
+
+    const prRef = doc(db, 'purchase_requests', requestId);
+    const snap = await getDoc(prRef);
+    if (!snap.exists()) return { success: false, error: 'Purchase request not found.' };
+
+    const reqData = snap.data() as PurchaseRequest;
+    if (reqData.requestedByUserId === (currentUser.uid || currentUser.id)) {
+      return { success: false, error: 'User cannot approve their own purchase request.' };
+    }
+
+    const now = new Date().toISOString();
+    await updateDoc(prRef, {
+      status: 'approved',
+      approvedAt: now,
+      approvedByUserId: currentUser.uid || currentUser.id || '',
+      approvedByUserName: currentUser.name || 'Admin',
+      updatedAt: now
+    });
+
+    await recordProcurementAuditLog('PURCHASE_REQUEST_APPROVED', requestId, reqData.requestNumber, currentUser, 'Approved purchase request');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error approving purchase request:', err);
+    return { success: false, error: err?.message || 'Failed to approve purchase request.' };
+  }
+}
+
+export async function rejectPurchaseRequest(requestId: string, reason: string, currentUser: AuthUser): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+    if (currentUser.role !== 'admin') return { success: false, error: 'Only admin can reject purchase requests.' };
+
+    const prRef = doc(db, 'purchase_requests', requestId);
+    const snap = await getDoc(prRef);
+    if (!snap.exists()) return { success: false, error: 'Purchase request not found.' };
+
+    const reqData = snap.data() as PurchaseRequest;
+    const now = new Date().toISOString();
+
+    await updateDoc(prRef, {
+      status: 'rejected',
+      rejectedAt: now,
+      rejectedByUserId: currentUser.uid || currentUser.id || '',
+      rejectionReason: reason || 'Rejected by admin',
+      updatedAt: now
+    });
+
+    await recordProcurementAuditLog('PURCHASE_REQUEST_REJECTED', requestId, reqData.requestNumber, currentUser, `Rejected purchase request: ${reason}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error rejecting purchase request:', err);
+    return { success: false, error: err?.message || 'Failed to reject purchase request.' };
+  }
+}
+
+export async function cancelPurchaseRequest(requestId: string, currentUser: AuthUser): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!currentUser) return { success: false, error: 'Authentication required.' };
+
+    const prRef = doc(db, 'purchase_requests', requestId);
+    const snap = await getDoc(prRef);
+    if (!snap.exists()) return { success: false, error: 'Purchase request not found.' };
+
+    const reqData = snap.data() as PurchaseRequest;
+    if (currentUser.role !== 'admin' && reqData.requestedByUserId !== (currentUser.uid || currentUser.id)) {
+      return { success: false, error: 'Not authorized to cancel this purchase request.' };
+    }
+
+    const now = new Date().toISOString();
+    await updateDoc(prRef, {
+      status: 'cancelled',
+      updatedAt: now
+    });
+
+    await recordProcurementAuditLog('PURCHASE_REQUEST_CANCELLED', requestId, reqData.requestNumber, currentUser, 'Cancelled purchase request');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error cancelling purchase request:', err);
+    return { success: false, error: err?.message || 'Failed to cancel purchase request.' };
+  }
+}
+
+
+
+export async function getPurchaseRequestItems(requestId: string): Promise<PurchaseRequestItem[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'purchase_request_items'), where('purchaseRequestId', '==', requestId)));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as PurchaseRequestItem));
+  } catch (err) {
+    console.error('Error fetching purchase request items:', err);
+    return [];
+  }
+}

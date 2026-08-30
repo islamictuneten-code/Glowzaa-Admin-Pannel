@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Customer, OrderItem, PaymentMethod, ProductCategory } from '../../types';
 import { 
   ShoppingCart, 
@@ -15,11 +16,22 @@ import {
   Calendar,
   Layers,
   CheckCircle2,
-  Loader2
+  Loader2,
+  ShieldAlert,
+  Shield,
+  Lock,
+  X
 } from 'lucide-react';
 import { Badge } from '../shared/Badge';
+import { 
+  checkOrderCreditEligibility, 
+  getCreditUtilizationInfo,
+  calculateCustomerRisk 
+} from '../../utils/creditEngine';
+import { formatBDT } from '../../utils/formatters';
 
 export const SalesNewOrder: React.FC = () => {
+  const { currentUser } = useAuth();
   const { 
     products, 
     customers, 
@@ -27,9 +39,11 @@ export const SalesNewOrder: React.FC = () => {
     currentSalesUser, 
     createOrder, 
     setSalesTab, 
-    formatBDT,
+    formatBDT: fmtBDT,
     addToast
   } = useApp();
+
+  const isAdmin = currentUser?.role === 'admin';
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -48,6 +62,11 @@ export const SalesNewOrder: React.FC = () => {
     return d.toISOString().split('T')[0];
   });
   const [notes, setNotes] = useState('Deliver before 5 PM to shop counter.');
+
+  // Admin Override Modal State
+  const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [warningConfirmed, setWarningConfirmed] = useState(false);
 
   const filteredCustomers = customers.filter(c => 
     (c.shopName || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -72,9 +91,26 @@ export const SalesNewOrder: React.FC = () => {
   const netTotal = Math.max(0, subtotal - discountAmount);
   const dueAmount = Math.max(0, netTotal - paidAmount);
 
-  // Credit Limit Check
-  const projectedDue = (selectedCustomer?.currentDue || 0) + dueAmount;
-  const isCreditLimitExceeded = selectedCustomer ? projectedDue > selectedCustomer.creditLimit : false;
+  // Credit Engine Eligibility Evaluation
+  const orderCreditDue = Math.max(0, netTotal - (Number(paidAmount) || 0));
+  const creditCheck = selectedCustomer 
+    ? checkOrderCreditEligibility(selectedCustomer, orderCreditDue, isAdmin)
+    : {
+        allowed: true,
+        requiresAdminOverride: false,
+        requiresWarningConfirmation: false,
+        mode: 'NONE' as const,
+        isCreditHold: false,
+        creditLimit: 0,
+        currentDue: 0,
+        availableCredit: 0,
+        newOrderDueAmount: 0,
+        projectedDue: 0,
+        excessAmount: 0
+      };
+
+  const customerCreditInfo = selectedCustomer ? getCreditUtilizationInfo(selectedCustomer.creditLimit, selectedCustomer.currentDue) : null;
+  const customerRisk = selectedCustomer ? calculateCustomerRisk(selectedCustomer) : null;
 
   const handleAddItem = (productId: string) => {
     const prod = products.find(p => p.id === productId);
@@ -157,25 +193,8 @@ export const SalesNewOrder: React.FC = () => {
     setOrderItems(prev => prev.filter(i => i.productId !== productId));
   };
 
-  const handleSubmitOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCustomer) {
-      addToast({
-        type: 'error',
-        title: 'Customer Required',
-        message: 'Please select a registered retail shop customer.'
-      });
-      return;
-    }
-
-    if (orderItems.length === 0) {
-      addToast({
-        type: 'error',
-        title: 'Cart is Empty',
-        message: 'Please add at least one product to the order.'
-      });
-      return;
-    }
+  const executeOrderCreation = async (adminOverridePayload?: { isOverridden: boolean; overrideReason: string; overriddenBy: string }) => {
+    if (!selectedCustomer) return;
 
     setIsSubmitting(true);
     try {
@@ -196,9 +215,12 @@ export const SalesNewOrder: React.FC = () => {
         discount: discountAmount,
         grandTotal: netTotal,
         paidAmount: Number(paidAmount),
-        notes,
+        notes: adminOverridePayload?.isOverridden
+          ? `${notes} [ADMIN OVERRIDE: ${adminOverridePayload.overrideReason}]`.trim()
+          : notes,
         paymentMethod,
-        orderStatus: 'pending'
+        orderStatus: 'pending',
+        adminOverride: adminOverridePayload
       });
 
       if (res.success) {
@@ -209,20 +231,92 @@ export const SalesNewOrder: React.FC = () => {
     }
   };
 
+  const handleSubmitOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) {
+      addToast({
+        type: 'error',
+        title: 'Customer Required',
+        message: 'Please select a registered retail shop customer.'
+      });
+      return;
+    }
+
+    if (orderItems.length === 0) {
+      addToast({
+        type: 'error',
+        title: 'Cart is Empty',
+        message: 'Please add at least one product to the order.'
+      });
+      return;
+    }
+
+    // Evaluate Credit Engine Rules
+    if (!creditCheck.allowed) {
+      if (creditCheck.requiresAdminOverride) {
+        if (isAdmin) {
+          setIsOverrideModalOpen(true);
+          return;
+        }
+        addToast({
+          type: 'error',
+          title: creditCheck.isCreditHold ? 'Account on Credit Hold' : 'Credit Limit Exceeded',
+          message: creditCheck.reason || 'Admin override is required to book this order.'
+        });
+        return;
+      }
+
+      if (creditCheck.requiresWarningConfirmation && !warningConfirmed) {
+        const confirmProceed = window.confirm(
+          `CREDIT WARNING:\n${creditCheck.reason}\n\nProjected Due: ৳${creditCheck.projectedDue.toLocaleString()} vs Limit: ৳${creditCheck.creditLimit.toLocaleString()}.\n\nDo you wish to proceed with booking this order?`
+        );
+        if (!confirmProceed) return;
+        setWarningConfirmed(true);
+      } else if (!creditCheck.requiresWarningConfirmation) {
+        addToast({
+          type: 'error',
+          title: 'Order Blocked by Credit Policy',
+          message: creditCheck.reason || 'This order exceeds the approved credit limit and is blocked.'
+        });
+        return;
+      }
+    }
+
+    await executeOrderCreation();
+  };
+
+  const handleAdminOverrideSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideReason.trim() || !currentUser) {
+      addToast({
+        type: 'warning',
+        title: 'Reason Required',
+        message: 'Please enter a justification for overriding the credit policy.'
+      });
+      return;
+    }
+
+    setIsOverrideModalOpen(false);
+    await executeOrderCreation({
+      isOverridden: true,
+      overrideReason: overrideReason.trim(),
+      overriddenBy: currentUser.uid
+    });
+  };
+
   return (
     <div className="space-y-5">
-      
       {/* Header */}
       <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Create Wholesale Order</h1>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-50 text-[#0F766E] border border-teal-200">
-              Booking Cart
+              Smart Credit Guard Active
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Book official wholesale consignments for beauty retail shops and cosmetic resellers.
+            Book wholesale consignments with real-time credit limit verification and ledger projection.
           </p>
         </div>
 
@@ -238,7 +332,7 @@ export const SalesNewOrder: React.FC = () => {
           {/* Left Column (Catalog & Product Selector) - 7 Cols */}
           <div className="lg:col-span-7 space-y-4">
             
-            {/* Customer Selector Card */}
+            {/* Customer Selector & Smart Credit Card */}
             <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <label className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
@@ -250,47 +344,96 @@ export const SalesNewOrder: React.FC = () => {
 
               <select
                 value={selectedCustomerId}
-                onChange={e => setSelectedCustomerId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20 cursor-pointer"
+                onChange={e => {
+                  setSelectedCustomerId(e.target.value);
+                  setWarningConfirmed(false);
+                }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#0F766E]/20 cursor-pointer"
               >
                 {customers.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.shopName} ({c.ownerName}) — {c.area}, {c.district} | Due: {formatBDT(c.currentDue)}
+                    {c.shopName} ({c.ownerName}) — {c.area}, {c.district} | Due: {formatBDT(c.currentDue || 0)} {c.creditHold ? '[ON HOLD]' : ''}
                   </option>
                 ))}
               </select>
 
               {selectedCustomer && (
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Proprietor</span>
-                    <span className="font-semibold text-slate-800 truncate block">{selectedCustomer.ownerName}</span>
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Proprietor</span>
+                      <span className="font-semibold text-slate-800 truncate block">{selectedCustomer.ownerName}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Phone</span>
+                      <span className="font-semibold text-slate-800">{selectedCustomer.phone}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Current Due</span>
+                      <span className={`font-bold ${(selectedCustomer.currentDue || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {formatBDT(selectedCustomer.currentDue || 0)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Credit Limit</span>
+                      <span className="font-bold text-slate-900">{formatBDT(selectedCustomer.creditLimit || 0)}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Phone</span>
-                    <span className="font-semibold text-slate-800">{selectedCustomer.phone}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Current Due</span>
-                    <span className={`font-bold ${selectedCustomer.currentDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {formatBDT(selectedCustomer.currentDue)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Credit Limit</span>
-                    <span className="font-semibold text-slate-800">{formatBDT(selectedCustomer.creditLimit)}</span>
+
+                  {/* Smart Credit Mode & Risk Bar */}
+                  <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-500">Mode:</span>
+                      <span className="px-1.5 py-0.5 rounded font-bold bg-slate-200 text-slate-800 text-[10px]">
+                        {selectedCustomer.creditCheckMode || 'NONE'}
+                      </span>
+                      {customerRisk && (
+                        <span className={`px-1.5 py-0.5 rounded font-bold border ${customerRisk.badgeBg} ${customerRisk.badgeText} ${customerRisk.badgeBorder} text-[10px]`}>
+                          {customerRisk.level}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500">Available Credit: </span>
+                      <strong className="text-emerald-700 font-bold">
+                        {formatBDT(Math.max(0, (selectedCustomer.creditLimit || 0) - (selectedCustomer.currentDue || 0)))}
+                      </strong>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {isCreditLimitExceeded && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              {/* Credit Hold Banner */}
+              {selectedCustomer?.creditHold && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 flex items-start gap-2.5">
+                  <Lock className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold block">Credit Ceiling Exceeded</span>
-                    <p className="text-[11px] text-red-700">
-                      Adding this order will result in total due of {formatBDT(projectedDue)}, surpassing approved credit limit of {formatBDT(selectedCustomer?.creditLimit || 0)}. (Advance payment recommended).
+                    <span className="font-bold block">Administrative Credit Hold Active</span>
+                    <p className="text-[11px] text-rose-800 mt-0.5">
+                      {selectedCustomer.creditHoldReason || 'Orders on credit are locked for this customer.'} 
+                      {isAdmin ? ' (Admin: Override available below)' : ' (Please ask customer to settle due or contact Admin)'}
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Credit Block / Warning Banner */}
+              {!creditCheck.allowed && !selectedCustomer?.creditHold && (
+                <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
+                  creditCheck.requiresAdminOverride ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
+                  <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${creditCheck.requiresAdminOverride ? 'text-rose-600' : 'text-amber-600'}`} />
+                  <div>
+                    <span className="font-bold block">
+                      {creditCheck.requiresAdminOverride ? 'Credit Limit Hard-Block' : 'Credit Limit Warning'}
+                    </span>
+                    <p className="text-[11px] mt-0.5">
+                      {creditCheck.reason}
+                    </p>
+                    <div className="mt-1 font-semibold text-[10px]">
+                      Projected Due: {formatBDT(creditCheck.projectedDue)} | Excess: {formatBDT(creditCheck.excessAmount)}
+                    </div>
                   </div>
                 </div>
               )}
@@ -314,7 +457,7 @@ export const SalesNewOrder: React.FC = () => {
                     placeholder="Search by SKU or product name..."
                     value={productSearch}
                     onChange={e => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20"
+                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0F766E]/20"
                   />
                 </div>
 
@@ -421,7 +564,7 @@ export const SalesNewOrder: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setOrderItems([])}
-                    className="text-[11px] font-semibold text-red-600 hover:text-red-700 cursor-pointer"
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 cursor-pointer"
                   >
                     Clear Cart
                   </button>
@@ -444,7 +587,7 @@ export const SalesNewOrder: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(item.productId)}
-                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -514,7 +657,7 @@ export const SalesNewOrder: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-between font-bold text-red-600 pt-1">
+                  <div className="flex justify-between font-bold text-rose-600 pt-1">
                     <span>Due on Delivery:</span>
                     <span>{formatBDT(dueAmount)}</span>
                   </div>
@@ -540,16 +683,35 @@ export const SalesNewOrder: React.FC = () => {
                     />
                   </div>
 
+                  {/* Submission Button */}
                   <button
                     type="submit"
-                    disabled={isSubmitting || orderItems.length === 0}
-                    className="w-full py-2.5 rounded-lg bg-[#0F766E] hover:bg-[#115E59] text-white font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5 mt-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-98"
+                    disabled={isSubmitting || orderItems.length === 0 || (!creditCheck.allowed && !isAdmin)}
+                    className={`w-full py-2.5 rounded-lg text-white font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5 mt-2 cursor-pointer active:scale-98 ${
+                      !creditCheck.allowed
+                        ? isAdmin
+                          ? 'bg-amber-600 hover:bg-amber-700'
+                          : 'bg-slate-400 cursor-not-allowed'
+                        : 'bg-[#0F766E] hover:bg-[#115E59]'
+                    }`}
                   >
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Creating Order in Firestore...</span>
                       </>
+                    ) : !creditCheck.allowed ? (
+                      isAdmin ? (
+                        <>
+                          <Shield className="w-4 h-4" />
+                          <span>Admin Override & Book Order</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4" />
+                          <span>Credit Policy Blocked</span>
+                        </>
+                      )
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
@@ -557,6 +719,12 @@ export const SalesNewOrder: React.FC = () => {
                       </>
                     )}
                   </button>
+
+                  {!creditCheck.allowed && !isAdmin && (
+                    <p className="text-[10px] text-rose-600 text-center mt-1 font-medium">
+                      Order creation blocked by credit policy. Collect full advance payment or request admin approval.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -566,6 +734,71 @@ export const SalesNewOrder: React.FC = () => {
 
         </div>
       </form>
+
+      {/* Admin Override Modal */}
+      {isOverrideModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl p-6 border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-5 h-5 text-amber-600" />
+                <h3 className="text-base font-bold text-slate-900">Admin Credit Policy Override</h3>
+              </div>
+              <button
+                onClick={() => setIsOverrideModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminOverrideSubmit} className="space-y-4 text-xs">
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 space-y-1">
+                <span className="font-bold block">Credit Exception Details:</span>
+                <p>{creditCheck.reason}</p>
+                <div className="text-[11px] pt-1 font-semibold text-amber-800">
+                  Projected Due: {formatBDT(creditCheck.projectedDue)} | Limit: {formatBDT(creditCheck.creditLimit)}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Justification / Business Reason for Override (Mandatory) *
+                </label>
+                <textarea
+                  rows={3}
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="e.g. Approved by Director for Eid seasonal stock. Customer promised post-dated cheque."
+                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-[#0F766E] outline-hidden resize-none"
+                  required
+                />
+              </div>
+
+              <div className="text-[10px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                ⚠️ This override will be recorded in the permanent audit trail with your Administrator ID: <strong>{currentUser?.name}</strong>.
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsOverrideModalOpen(false)}
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!overrideReason.trim()}
+                  className="px-5 py-2 font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 rounded-lg shadow-sm"
+                >
+                  Confirm Override & Book
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

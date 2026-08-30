@@ -15,7 +15,6 @@ import {
 import { AuthUser, CommunicationConversation, CommunicationDevice } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
 import { PresenceBadge, getStaffOnlineStatus } from './PresenceBadge';
-import { VoiceCallButton } from './VoiceCallButton';
 
 interface ConversationListProps {
   currentUserId: string;
@@ -314,20 +313,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                       </span>
                     </div>
 
-                    {/* Last Message Time & Quick Call Action */}
+                    {/* Last Message Time */}
                     <div className="flex items-center gap-1.5 shrink-0">
                       {conv?.lastMessageAt && (
                         <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
                           {formatTime(conv.lastMessageAt)}
                         </span>
                       )}
-
-                      <VoiceCallButton
-                        receiver={staff}
-                        conversationId={conv?.id}
-                        showLabel={false}
-                        className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer shrink-0"
-                      />
                     </div>
                   </div>
 

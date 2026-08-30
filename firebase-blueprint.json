@@ -715,6 +715,177 @@
         "calledAt": { "type": "string" }
       },
       "required": ["id", "callerId", "targetId", "status", "queuedAt"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Wholesale product suppliers and vendor directory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplierCode": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive", "blocked"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "supplierCode", "name", "status", "createdAt"]
+    },
+    "SupplierProduct": {
+      "title": "SupplierProduct",
+      "description": "Product-supplier relationship mapping",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "productId": { "type": "string" },
+        "purchasePrice": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "supplierId", "productId", "purchasePrice", "isActive"]
+    },
+    "PurchaseRequest": {
+      "title": "PurchaseRequest",
+      "description": "Procurement purchase requests initiated by sales or admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "requestNumber": { "type": "string" },
+        "requestedByUserId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "pending_approval", "approved", "rejected", "converted", "cancelled"] },
+        "totalEstimatedAmountBDT": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "requestNumber", "requestedByUserId", "status", "totalEstimatedAmountBDT", "createdAt"]
+    },
+    "PurchaseRequestItem": {
+      "title": "PurchaseRequestItem",
+      "description": "Line items for purchase requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "purchaseRequestId": { "type": "string" },
+        "productId": { "type": "string" },
+        "requestedQuantity": { "type": "number" },
+        "estimatedUnitPrice": { "type": "number" }
+      },
+      "required": ["id", "purchaseRequestId", "productId", "requestedQuantity", "estimatedUnitPrice"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Formal supplier commitment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "pending_approval", "approved", "sent_to_supplier", "supplier_confirmed", "in_transit", "partially_received", "received", "closed", "rejected", "cancelled"] },
+        "createdByUserId": { "type": "string" },
+        "totalAmountBDT": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "poNumber", "supplierId", "status", "createdByUserId", "totalAmountBDT", "createdAt"]
+    },
+    "PurchaseOrderItem": {
+      "title": "PurchaseOrderItem",
+      "description": "Line items for purchase orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "purchaseOrderId": { "type": "string" },
+        "productId": { "type": "string" },
+        "orderedQuantity": { "type": "number" },
+        "unitPurchasePriceBDT": { "type": "number" },
+        "totalLineAmountBDT": { "type": "number" }
+      },
+      "required": ["id", "purchaseOrderId", "productId", "orderedQuantity", "unitPurchasePriceBDT", "totalLineAmountBDT"]
+    },
+    "GoodsReceipt": {
+      "title": "GoodsReceipt",
+      "description": "Goods receiving note (GRN) recording delivery inspection and inventory post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "grnNumber": { "type": "string" },
+        "purchaseOrderId": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "receivedByUserId": { "type": "string" },
+        "receivedByUserName": { "type": "string" },
+        "receivedDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "posted", "cancelled"] },
+        "totalAcceptedValueBDT": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "grnNumber", "purchaseOrderId", "status", "receivedByUserId", "createdAt"]
+    },
+    "GoodsReceiptItem": {
+      "title": "GoodsReceiptItem",
+      "description": "Item-level inspection results on goods receiving note",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "goodsReceiptId": { "type": "string" },
+        "purchaseOrderItemId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "orderedQuantity": { "type": "number" },
+        "receivedQuantity": { "type": "number" },
+        "acceptedQuantity": { "type": "number" },
+        "damagedQuantity": { "type": "number" },
+        "rejectedQuantity": { "type": "number" },
+        "unitPurchasePriceBDT": { "type": "number" },
+        "acceptedValueBDT": { "type": "number" }
+      },
+      "required": ["id", "goodsReceiptId", "productId", "receivedQuantity", "acceptedQuantity"]
+    },
+    "ProcurementAuditLog": {
+      "title": "ProcurementAuditLog",
+      "description": "Immutable procurement audit trail for requests, POs, and GRNs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "performedByUserId": { "type": "string" },
+        "performedByUserName": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "entityId", "performedByUserId", "timestamp"]
+    },
+    "ExecutiveBISettings": {
+      "title": "ExecutiveBISettings",
+      "description": "Executive BI KPI targets, alert thresholds, and profitability configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "monthlyTargetBDT": { "type": "number" },
+        "marginWarningThresholdPercent": { "type": "number" },
+        "marginCriticalThresholdPercent": { "type": "number" },
+        "lossMakingAlertThresholdBDT": { "type": "number" },
+        "topCustomerShareAlertPercent": { "type": "number" },
+        "inactiveCustomerDays": { "type": "number" },
+        "deadStockDays": { "type": "number" },
+        "slowMovingDays": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "updatedByUserId": { "type": "string" },
+        "updatedByUserName": { "type": "string" }
+      }
+    },
+    "ExecutiveBIAuditLog": {
+      "title": "ExecutiveBIAuditLog",
+      "description": "Executive BI settings audit logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "performedByUserId": { "type": "string" },
+        "performedByUserName": { "type": "string" },
+        "performedByUserRole": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["action", "performedByUserId", "timestamp"]
     }
   },
   "firestore": {
@@ -801,6 +972,50 @@
     "/communication_messages/{messageId}": {
       "schema": "CommunicationMessage",
       "description": "Private real-time chat messages between Admin and Staff member"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Wholesale suppliers directory"
+    },
+    "/supplier_products/{supplierProductId}": {
+      "schema": "SupplierProduct",
+      "description": "Product and supplier pricing mapping"
+    },
+    "/purchase_requests/{purchaseRequestId}": {
+      "schema": "PurchaseRequest",
+      "description": "Procurement purchase requests"
+    },
+    "/purchase_request_items/{itemId}": {
+      "schema": "PurchaseRequestItem",
+      "description": "Purchase request line items"
+    },
+    "/purchase_orders/{purchaseOrderId}": {
+      "schema": "PurchaseOrder",
+      "description": "Purchase orders"
+    },
+    "/purchase_order_items/{itemId}": {
+      "schema": "PurchaseOrderItem",
+      "description": "Purchase order line items"
+    },
+    "/goods_receipts/{receiptId}": {
+      "schema": "GoodsReceipt",
+      "description": "Goods receiving notes"
+    },
+    "/goods_receipt_items/{itemId}": {
+      "schema": "GoodsReceiptItem",
+      "description": "Goods receipt items"
+    },
+    "/procurement_audit_logs/{logId}": {
+      "schema": "ProcurementAuditLog",
+      "description": "Procurement audit logs"
+    },
+    "/executive_bi_settings/{settingId}": {
+      "schema": "ExecutiveBISettings",
+      "description": "Global executive BI profitability and performance settings"
+    },
+    "/bi_audit_logs/{logId}": {
+      "schema": "ExecutiveBIAuditLog",
+      "description": "Executive BI settings audit change log entries"
     }
   }
 }

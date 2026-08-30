@@ -15,7 +15,8 @@ import {
   Eye,
   PlusCircle,
   Truck,
-  Building2
+  Building2,
+  BarChart3
 } from 'lucide-react';
 
 export const AdminOverview: React.FC = () => {
@@ -72,7 +73,14 @@ export const AdminOverview: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setAdminTab('executive_bi')}
+            className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs transition-colors shadow-2xs flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <BarChart3 className="w-4 h-4 text-teal-200" />
+            <span>Executive BI</span>
+          </button>
           <button
             onClick={() => setAdminTab('orders')}
             className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white font-semibold text-xs transition-colors shadow-2xs flex items-center justify-center gap-2 cursor-pointer"

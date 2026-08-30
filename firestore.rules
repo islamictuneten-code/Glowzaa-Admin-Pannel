@@ -97,20 +97,42 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Customers Collection rules: All authenticated staff can read; Admin and Sales can create/update; Delivery can ONLY update payment balance fields; Only Admin can delete
+    // Customers Collection rules: All authenticated staff can read; Admin and Sales can create/update; Delivery can ONLY update payment balance fields; Only Admin can delete or modify credit policy fields
     match /customers/{customerId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin() || isSales();
-      allow update: if isAdmin() || isSales() || isDelivery() || (
+      allow update: if isAdmin() || (
+        (isSales() || isDelivery()) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'creditLimit', 'creditCheckMode', 'creditHold', 'creditHoldReason', 
+          'creditReviewDate', 'creditNote', 'riskLevel'
+        ])
+      ) || (
         isAuthenticated() && 
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'creditLimit', 'shopName', 'ownerName', 'phone', 'alternatePhone', 
+          'creditLimit', 'creditCheckMode', 'creditHold', 'creditHoldReason', 
+          'creditReviewDate', 'creditNote', 'riskLevel',
+          'shopName', 'ownerName', 'phone', 'alternatePhone', 
           'email', 'address', 'area', 'city', 'district', 'notes', 
           'assignedSalesUserId', 'assignedSalesUserName', 'totalPurchase', 
           'totalReturned', 'paymentTermDays', 'status', 'tradeLicenseNo'
         ])
       );
       allow delete: if isAdmin();
+    }
+
+    // Customer Notes Collection rules: Internal collaboration notes for sales and admin
+    match /customer_notes/{noteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        isAdmin() || isSales() || request.resource.data.createdBy == request.auth.uid
+      );
+      allow update: if isAdmin() || (
+        isAuthenticated() && resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isAdmin() || (
+        isAuthenticated() && resource.data.createdBy == request.auth.uid
+      );
     }
 
     // Orders Collection rules: All authenticated staff can read; authenticated staff can create; Admin full update; Sales update own orders; Delivery update assigned orders (items, deliveryStatus, orderStatus, POD & payment status allowed)
@@ -528,6 +550,143 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ========================================================================
+    // STEP 17.1 & 17.2 & 17.3 — SMART PURCHASE, SUPPLIER MANAGEMENT & GOODS RECEIPT RULES
+    // ========================================================================
+
+    match /suppliers/{supplierId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /supplier_products/{supplierProductId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() || isAuthenticated();
+    }
+
+    match /purchase_requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /purchase_request_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /purchase_orders/{purchaseOrderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /purchase_order_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /goods_receipts/{receiptId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /goods_receipt_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /procurement_audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /inventory_transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // STEP 17.4 — Supplier Performance Scorecard & Price Intelligence
+    match /supplier_scorecard_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /supplier_performance_snapshots/{snapshotId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /supplier_price_alerts/{alertId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // STEP 17.5 — Smart Procurement Recommendations & Settings
+    match /procurement_recommendations/{recId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /procurement_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ========================================================================
+    // CASH FLOW & FINANCIAL CONTROL CENTER RULES
+    // ========================================================================
+
+    match /cash_flow_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /cash_flow_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // ========================================================================
+    // INVENTORY INTELLIGENCE & WAREHOUSE CONTROL RULES
+    // ========================================================================
+
+    match /inventory_intelligence_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /inventory_intelligence_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // ========================================================================
+    // EXECUTIVE BI & PROFITABILITY DASHBOARD RULES
+    // ========================================================================
+
+    match /executive_bi_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /bi_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
   }
 }
+
 

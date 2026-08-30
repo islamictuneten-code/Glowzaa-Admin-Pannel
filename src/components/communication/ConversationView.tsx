@@ -31,8 +31,6 @@ import {
 } from '../../services/communicationService';
 import { UserAvatar } from '../shared/UserAvatar';
 import { PresenceBadge, getStaffOnlineStatus } from './PresenceBadge';
-import { useNotification } from '../../context/NotificationContext';
-import { VoiceCallButton } from './VoiceCallButton';
 
 interface ConversationViewProps {
   currentUser: AuthUser;
@@ -58,7 +56,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { playChime } = useNotification();
 
   const conversationId = conversation?.id || '';
   const currentUserId = currentUser.uid || (currentUser as any).id || '';
@@ -163,7 +160,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       if (!customText) {
         setInputText('');
       }
-      playChime('normal').catch(() => {});
       inputRef.current?.focus();
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -260,25 +256,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <VoiceCallButton
-            receiver={staffUser}
-            conversationId={conversationId || undefined}
-            showLabel={true}
-            label="Call"
-            className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold transition-all bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-2xs flex items-center gap-1.5 cursor-pointer"
-          />
-          
-          {staffUser.phone && (
-            <a
-              href={`tel:${staffUser.phone}`}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 text-slate-700 hover:text-[#087F7A] hover:bg-teal-50 rounded-xl transition-colors border border-slate-200 cursor-pointer flex items-center gap-1 text-xs font-bold"
-              title={`Call ${staffUser.name} (${staffUser.phone}) via mobile network`}
-            >
-              <Phone className="w-3.5 h-3.5 text-teal-600" />
-              <span className="hidden md:inline">Mobile</span>
-            </a>
-          )}
-
           <button
             onClick={() => setShowTemplates(!showTemplates)}
             className={`px-2.5 py-1.5 rounded-xl transition-colors border text-xs font-bold flex items-center gap-1 cursor-pointer ${
