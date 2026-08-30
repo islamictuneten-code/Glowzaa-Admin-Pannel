@@ -45,6 +45,8 @@ import { ExecutiveBIDashboard } from './components/admin/bi/ExecutiveBIDashboard
 import { CashFlowControlCenter } from './components/admin/cashflow/CashFlowControlCenter';
 import { SalesForecastDashboard } from './components/admin/SalesForecastDashboard';
 import { InventoryIntelligenceDashboard } from './components/admin/InventoryIntelligenceDashboard';
+import { CustomerIntelligenceDashboard } from './components/admin/CustomerIntelligenceDashboard';
+import { SalesCrmDashboard } from './components/admin/SalesCrmDashboard';
 import { BusinessAlertsActionCenter } from './components/admin/BusinessAlertsActionCenter';
 import { StaffChatInterface } from './components/communication/StaffChatInterface';
 import { MySalaryView } from './components/shared/MySalaryView';
@@ -154,6 +156,10 @@ const DashboardContent: React.FC = () => {
           return <SalesForecastDashboard />;
         case 'inventory_intelligence':
           return <InventoryIntelligenceDashboard />;
+        case 'customer_intelligence':
+          return <CustomerIntelligenceDashboard />;
+        case 'sales_crm':
+          return <SalesCrmDashboard />;
         default:
           return <AdminOverview />;
       }
@@ -168,6 +174,8 @@ const DashboardContent: React.FC = () => {
           return <SalesIntelligenceDashboard />;
         case 'sales_forecast':
           return <SalesForecastDashboard />;
+        case 'sales_crm':
+          return <SalesCrmDashboard />;
         case 'business_alerts':
           return <BusinessAlertsActionCenter />;
         case 'messages':

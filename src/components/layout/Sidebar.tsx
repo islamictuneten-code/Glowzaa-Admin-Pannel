@@ -23,6 +23,7 @@ import {
   PlusCircle,
   Clock,
   CheckCircle2,
+  CheckSquare,
   XCircle,
   Banknote,
   History,
@@ -133,6 +134,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'sales_forecast', label: 'Sales Forecast & Trends', icon: <TrendingUp className="w-4 h-4 text-emerald-600" /> },
     { id: 'inventory_intelligence', label: 'Inventory Intelligence', icon: <Boxes className="w-4 h-4 text-[#0F766E]" /> },
+    { id: 'customer_intelligence', label: 'Customer Intelligence', icon: <Users className="w-4 h-4 text-[#0F766E]" /> },
+    { id: 'sales_crm', label: 'Sales CRM & Tasks', icon: <CheckSquare className="w-4 h-4 text-[#0F766E]" /> },
     { id: 'business_alerts', label: 'Business Alerts', icon: <ShieldAlert className="w-4 h-4 text-rose-500" /> },
     { id: 'warehouses', label: 'Warehouse Management', icon: <Building2 className="w-4 h-4" /> },
   ];
@@ -141,6 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'sales_intelligence', label: 'Sales Intelligence', icon: <Sparkles className="w-4 h-4 text-amber-500" /> },
     { id: 'sales_forecast', label: 'Sales Forecast', icon: <TrendingUp className="w-4 h-4 text-emerald-600" /> },
+    { id: 'sales_crm', label: 'Sales CRM & Tasks', icon: <CheckSquare className="w-4 h-4 text-[#0F766E]" /> },
     { id: 'business_alerts', label: 'Business Alerts', icon: <ShieldAlert className="w-4 h-4 text-rose-500" /> },
     { 
       id: 'messages', 

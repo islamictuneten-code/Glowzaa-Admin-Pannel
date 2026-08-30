@@ -159,7 +159,9 @@ export type AdminTab =
   | 'sales_forecast'
   | 'inventory_intelligence'
   | 'smart_procurement'
-  | 'cash_flow_center';
+  | 'cash_flow_center'
+  | 'customer_intelligence'
+  | 'sales_crm';
 
 export type SalesTab = 
   | 'dashboard'
@@ -176,7 +178,8 @@ export type SalesTab =
   | 'sales_summary'
   | 'my_salary'
   | 'business_alerts'
-  | 'sales_forecast';
+  | 'sales_forecast'
+  | 'sales_crm';
 
 export type DeliveryTab = 
   | 'dashboard'

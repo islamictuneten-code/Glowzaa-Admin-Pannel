@@ -657,8 +657,41 @@ service cloud.firestore {
     }
 
     // ========================================================================
-    // INVENTORY INTELLIGENCE & WAREHOUSE CONTROL RULES
+    // CUSTOMER & SALES GROWTH INTELLIGENCE RULES
     // ========================================================================
+
+    match /customer_intelligence_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /customer_intelligence_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // ========================================================================
+    // SALES CRM & SELLER TASK MANAGEMENT RULES (STEP 22)
+    // ========================================================================
+
+    match /crm_tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /crm_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /crm_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
 
     match /inventory_intelligence_settings/{settingId} {
       allow read: if isAuthenticated();
