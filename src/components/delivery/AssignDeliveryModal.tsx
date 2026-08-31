@@ -12,12 +12,13 @@ interface AssignDeliveryModalProps {
 export const AssignDeliveryModal: React.FC<AssignDeliveryModalProps> = ({ order, onClose }) => {
   const { deliveryStaff, assignDeliveryToOrder } = useApp();
 
-  const activeStaff = deliveryStaff.filter(
-    d => d.status === 'on_duty' || d.status === 'available' || d.status === 'active'
-  );
+  const availableStaff = deliveryStaff.length > 0 ? [...deliveryStaff].sort((a, b) => {
+    const statusOrder: Record<string, number> = { on_duty: 0, available: 1, active: 2, off_duty: 3 };
+    return (statusOrder[a.status || ''] ?? 9) - (statusOrder[b.status || ''] ?? 9);
+  }) : [];
 
   const [selectedDriverId, setSelectedDriverId] = useState<string>(
-    order.deliveryStaffId || (activeStaff.length > 0 ? activeStaff[0].id : '')
+    order.deliveryStaffId || (availableStaff.length > 0 ? availableStaff[0].id : '')
   );
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,9 @@ export const AssignDeliveryModal: React.FC<AssignDeliveryModalProps> = ({ order,
       return;
     }
 
-    const driver = activeStaff.find(d => d.id === selectedDriverId);
+    const driver = availableStaff.find(
+      d => d.id === selectedDriverId || (d as any).uid === selectedDriverId || d.staffId === selectedDriverId
+    );
     if (!driver) {
       setError('Selected delivery staff not found.');
       return;
@@ -37,7 +40,7 @@ export const AssignDeliveryModal: React.FC<AssignDeliveryModalProps> = ({ order,
 
     setIsSubmitting(true);
     try {
-      await assignDeliveryToOrder(order.id, driver.id, driver.name);
+      await assignDeliveryToOrder(order.id, driver.id);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to assign delivery staff.');
@@ -74,12 +77,12 @@ export const AssignDeliveryModal: React.FC<AssignDeliveryModalProps> = ({ order,
             }}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-purple-500"
           >
-            {activeStaff.length === 0 ? (
-              <option value="">No Active Drivers Available</option>
+            {availableStaff.length === 0 ? (
+              <option value="">No Drivers Available</option>
             ) : (
-              activeStaff.map(d => (
+              availableStaff.map(d => (
                 <option key={d.id} value={d.id}>
-                  {d.name} — Vehicle: {d.vehicleNumber || 'Unassigned'} ({(d.assignedZones || [d.assignedArea || 'All Zones']).join(', ')})
+                  {d.name} — Vehicle: {d.vehicleNumber || 'Unassigned'} ({(d.assignedZones || [d.assignedArea || 'All Zones']).join(', ')}) [{d.status || 'active'}]
                 </option>
               ))
             )}

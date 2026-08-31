@@ -1,5 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { isOrderAssignedToDeliveryUser } from '../../utils/deliveryUtils';
 import { 
   LayoutDashboard, 
   Receipt, 
@@ -25,19 +27,19 @@ export const MobileBottomNav: React.FC = () => {
     currentDeliveryUser
   } = useApp();
 
+  const { currentUser } = useAuth();
+
   // Badges & Counters
   const pendingOrdersCount = (orders || []).filter(o => o && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
   const lowStockCount = (products || []).filter(p => p && (p.status === 'low_stock' || p.status === 'out_of_stock')).length;
   
   const salesUserId = currentSalesUser?.id || '';
-  const deliveryUserId = currentDeliveryUser?.id || '';
-  const deliveryUserUid = (currentDeliveryUser as any)?.uid || '';
 
   const myPendingSalesOrders = (orders || []).filter(
     o => o && salesUserId && o.salesSellerId === salesUserId && (o.orderStatus === 'pending' || o.orderStatus === 'processing')
   ).length;
   const myPendingDeliveries = (orders || []).filter(
-    o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')
+    o => o && isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser) && o.deliveryStatus !== 'delivered' && o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled'
   ).length;
 
   // Role-specific 4-item navigation menu configurations

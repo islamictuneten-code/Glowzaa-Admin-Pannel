@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { isOrderAssignedToDeliveryUser } from '../../utils/deliveryUtils';
 import { AdminTab, DeliveryTab, SalesTab } from '../../types';
 import { UserAvatar } from '../shared/UserAvatar';
 import { subscribeToCommunicationConversations } from '../../services/communicationService';
@@ -320,13 +321,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
   const overdueCustomersCount = (customers || []).filter(c => c && (c.currentDue || 0) > 0).length;
   
   const salesUserId = currentSalesUser?.id || '';
-  const deliveryUserId = currentDeliveryUser?.id || '';
-  const deliveryUserUid = (currentDeliveryUser as any)?.uid || '';
 
   const myPendingSalesOrders = (orders || []).filter(o => o && salesUserId && o.salesSellerId === salesUserId && (o.orderStatus === 'pending' || o.orderStatus === 'processing')).length;
-  const myPendingDeliveries = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && (o.orderStatus === 'dispatched' || o.orderStatus === 'processing')).length;
-  const myCompletedToday = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && o.orderStatus === 'delivered').length;
-  const myReturnedCount = (orders || []).filter(o => o && (deliveryUserId || deliveryUserUid) && (o.deliveryStaffId === deliveryUserId || o.deliveryStaffId === deliveryUserUid) && o.orderStatus === 'returned').length;
+  const myPendingDeliveries = (orders || []).filter(o => o && isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser) && o.deliveryStatus !== 'delivered' && o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled').length;
+  const myCompletedToday = (orders || []).filter(o => o && isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser) && (o.deliveryStatus === 'delivered' || o.orderStatus === 'delivered')).length;
+  const myReturnedCount = (orders || []).filter(o => o && isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser) && (o.deliveryStatus === 'returned' || o.orderStatus === 'returned' || o.deliveryStatus === 'failed')).length;
 
   const salesNavItems: { id: SalesTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },

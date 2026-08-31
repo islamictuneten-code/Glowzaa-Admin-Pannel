@@ -1,5 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { isOrderAssignedToDeliveryUser } from '../../utils/deliveryUtils';
 import { StatCard } from '../shared/StatCard';
 import { Badge } from '../shared/Badge';
 import { UserAvatar } from '../shared/UserAvatar';
@@ -29,7 +31,9 @@ export const DeliveryOverview: React.FC = () => {
     formatBDT 
   } = useApp();
 
-  if (!currentDeliveryUser) {
+  const { currentUser } = useAuth();
+
+  if (!currentDeliveryUser && !currentUser) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
@@ -39,16 +43,10 @@ export const DeliveryOverview: React.FC = () => {
   }
 
   // Assigned Orders
-  const myAssignedOrders = orders.filter(o => 
-    (o && currentDeliveryUser && (
-      o.deliveryStaffId === currentDeliveryUser.id || 
-      (currentDeliveryUser as any).uid === o.deliveryStaffId ||
-      (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
-    ))
-  );
+  const myAssignedOrders = orders.filter(o => isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser));
   const todayRuns = myAssignedOrders.filter(o => o.orderStatus !== 'cancelled');
-  const deliveredOrders = myAssignedOrders.filter(o => o.deliveryStatus === 'delivered');
-  const pendingRuns = myAssignedOrders.filter(o => o.deliveryStatus === 'pending' || o.deliveryStatus === 'out_for_delivery');
+  const deliveredOrders = myAssignedOrders.filter(o => o.deliveryStatus === 'delivered' || o.orderStatus === 'delivered');
+  const pendingRuns = myAssignedOrders.filter(o => o.deliveryStatus !== 'delivered' && o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled');
 
   return (
     <div className="space-y-6">

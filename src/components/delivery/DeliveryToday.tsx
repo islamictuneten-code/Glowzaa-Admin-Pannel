@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { isOrderAssignedToDeliveryUser } from '../../utils/deliveryUtils';
 import { Order, DeliveryStatus } from '../../types';
 import { Badge } from '../shared/Badge';
 import { EmptyState } from '../shared/EmptyState';
@@ -37,7 +39,9 @@ export const DeliveryToday: React.FC = () => {
   const [paymentModalOrder, setPaymentModalOrder] = useState<Order | null>(null);
   const [podModalOrder, setPodModalOrder] = useState<Order | null>(null);
 
-  if (!currentDeliveryUser) {
+  const { currentUser } = useAuth();
+
+  if (!currentDeliveryUser && !currentUser) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
@@ -47,11 +51,7 @@ export const DeliveryToday: React.FC = () => {
   }
 
   const todayRuns = orders.filter(
-    o => (o && currentDeliveryUser && (
-          o.deliveryStaffId === currentDeliveryUser.id || 
-          o.deliveryStaffId === currentDeliveryUser.uid || 
-          (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
-    )) && o.orderStatus !== 'cancelled'
+    o => isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser) && o.orderStatus !== 'cancelled'
   );
 
   const pendingRuns = todayRuns.filter(o => o.deliveryStatus !== 'delivered' && o.deliveryStatus !== 'returned' && o.deliveryStatus !== 'failed');

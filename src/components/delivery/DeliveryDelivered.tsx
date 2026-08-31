@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { isOrderAssignedToDeliveryUser } from '../../utils/deliveryUtils';
 import { Badge } from '../shared/Badge';
 import { 
   PackageCheck, 
@@ -16,7 +18,9 @@ export const DeliveryDelivered: React.FC = () => {
   const { orders, currentDeliveryUser, setViewingOrder, formatBDT } = useApp();
   const [search, setSearch] = useState('');
 
-  if (!currentDeliveryUser) {
+  const { currentUser } = useAuth();
+
+  if (!currentDeliveryUser && !currentUser) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
         <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
@@ -26,12 +30,8 @@ export const DeliveryDelivered: React.FC = () => {
   }
 
   const deliveredOrders = orders.filter(
-    o => (o && currentDeliveryUser && (
-      o.deliveryStaffId === currentDeliveryUser.id || 
-      o.deliveryStaffId === currentDeliveryUser.uid || 
-      (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
-    )) && 
-    o.deliveryStatus === 'delivered'
+    o => isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser) && 
+    (o.deliveryStatus === 'delivered' || o.orderStatus === 'delivered' || o.deliveryStatus === 'partially_delivered')
   );
 
   const filteredOrders = deliveredOrders.filter(o =>

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { isOrderAssignedToDeliveryUser } from '../../utils/deliveryUtils';
 import { Badge } from '../shared/Badge';
 import { Order, DeliveryStatus } from '../../types';
 import { DeliveryStatusConfirmModal } from './DeliveryStatusConfirmModal';
@@ -41,7 +43,9 @@ export const DeliveryAssignedOrders: React.FC = () => {
   // State for Partial / Full Delivery modal
   const [partialModalOrder, setPartialModalOrder] = useState<Order | null>(null);
 
-  if (!currentDeliveryUser) {
+  const { currentUser } = useAuth();
+
+  if (!currentDeliveryUser && !currentUser) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center p-6">
         <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
@@ -50,13 +54,7 @@ export const DeliveryAssignedOrders: React.FC = () => {
     );
   }
 
-  const myAssignedOrders = orders.filter(o => 
-    (o && currentDeliveryUser && (
-      o.deliveryStaffId === currentDeliveryUser.id || 
-      o.deliveryStaffId === currentDeliveryUser.uid ||
-      (o.deliveryStaffName && o.deliveryStaffName.toLowerCase() === currentDeliveryUser.name?.toLowerCase())
-    ))
-  );
+  const myAssignedOrders = orders.filter(o => isOrderAssignedToDeliveryUser(o, currentDeliveryUser, currentUser));
 
   const filteredOrders = myAssignedOrders.filter(o => {
     const matchesSearch = o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
