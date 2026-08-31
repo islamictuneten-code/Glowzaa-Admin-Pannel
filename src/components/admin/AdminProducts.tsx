@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
 import { Badge } from '../shared/Badge';
 import { Modal } from '../shared/Modal';
+import { ProductImageUploader } from './ProductImageUploader';
 import { 
   Package, 
   Search, 
@@ -673,25 +674,12 @@ export const AdminProducts: React.FC = () => {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Product Image URL
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    value={image}
-                    onChange={(e) => setImage(e.target.value)}
-                    className="flex-1 px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-rose-500/20"
-                  />
-                  {image && (
-                    <img 
-                      src={image} 
-                      alt="Preview" 
-                      className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0" 
-                    />
-                  )}
-                </div>
+                <ProductImageUploader
+                  value={image}
+                  onChange={setImage}
+                  sku={sku || 'GZ-PROD'}
+                  label="Product Photo / Image"
+                />
               </div>
 
               <div className="sm:col-span-2">
@@ -1094,14 +1082,11 @@ export const AdminProducts: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Image URL
-              </label>
-              <input
-                type="url"
+              <ProductImageUploader
                 value={editingProduct.image}
-                onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium"
+                onChange={(url) => setEditingProduct({ ...editingProduct, image: url })}
+                sku={editingProduct.sku}
+                label="Product Photo / Image"
               />
             </div>
 

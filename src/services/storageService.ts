@@ -212,6 +212,76 @@ export async function uploadStaffProfilePhoto(
     };
   }
 }
+
+/**
+ * Uploads & compresses a product photo to Firebase Storage (or returns base64 data URL)
+ * Target path: `product_photos/{sku}_{timestamp}.{ext}`
+ */
+export async function uploadProductPhoto(
+  file: File,
+  sku: string = 'PROD',
+  performedByUserId: string = 'admin'
+): Promise<{ success: boolean; downloadUrl?: string; downloadURL?: string; error?: string }> {
+  try {
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    // Compress & resize to 600x600 max
+    const { blob, mimeType, extension } = await compressAndResizeImage(file, 600, 600, 0.85);
+
+    // Convert to base64 fallback
+    const base64Url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to convert product image to base64'));
+      reader.readAsDataURL(blob);
+    });
+
+    try {
+      const timestamp = Date.now();
+      const sanitizedSku = sku.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const storageRef = ref(storage, `product_photos/${sanitizedSku}_${timestamp}.${extension}`);
+
+      const uploadPromise = (async () => {
+        const uploadResult = await uploadBytes(storageRef, blob, {
+          contentType: mimeType,
+          customMetadata: {
+            uploadedBy: performedByUserId,
+            sku: sku,
+            uploadedAt: new Date().toISOString()
+          }
+        });
+        return await getDownloadURL(uploadResult.ref);
+      })();
+
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error('Storage upload request timed out after 3.5 seconds')), 3500);
+      });
+
+      const downloadURL = await Promise.race([uploadPromise, timeoutPromise]);
+      return {
+        success: true,
+        downloadUrl: downloadURL,
+        downloadURL: downloadURL
+      };
+    } catch (storageErr: any) {
+      console.warn('Firebase Storage upload notice, using compressed base64 photo fallback:', storageErr?.message || storageErr);
+      return {
+        success: true,
+        downloadUrl: base64Url,
+        downloadURL: base64Url
+      };
+    }
+  } catch (error: any) {
+    console.error('Product photo processing error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to process product photo.'
+    };
+  }
+}
 /**
  * Extracts professional fallback initials from a user's name
  */
